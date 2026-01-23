@@ -1,0 +1,40 @@
+# Development requirements (without PostgreSQL dependencies)
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Database (SQLite - no additional drivers needed)
+sqlalchemy==2.0.23
+alembic==1.12.1
+
+# Redis (optional)
+redis==5.0.1
+
+# Data processing
+pandas==2.1.3
+numpy==1.26.2
+openpyxl==3.1.2
+xlrd==2.0.1
+
+# Machine Learning (core)
+scikit-learn==1.3.2
+scipy==1.11.4
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2023.3
+email-validator==2.1.0
+aiofiles==23.2.1
+
+# HTTP client
+httpx==0.25.2
+
+# Environment
+python-dotenv==1.0.0
+
+# Note: statsmodels, prophet, and torch are optional for basic functionality
+# Install separately if needed for forecasting
