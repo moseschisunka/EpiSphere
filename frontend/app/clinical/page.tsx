@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import Navbar from '../../components/Navbar'
@@ -110,7 +110,7 @@ export default function ClinicalDesk() {
                             <tbody className="divide-y divide-gray-200">
                                 {patients.map(p => (
                                     <tr key={p.id}>
-                                        <td className="px-6 py-4">{p.mrn || 'N/A'}</td>
+                                        <td className="px-6 py-4">{p.mrn_display || 'Protected'}</td>
                                         <td className="px-6 py-4">{p.dob}</td>
                                         <td className="px-6 py-4">{p.gender}</td>
                                         <td className="px-6 py-4">
@@ -159,7 +159,7 @@ export default function ClinicalDesk() {
 
                 {view === 'encounter' && selectedPatient && (
                     <div className="bg-white p-6 rounded-lg shadow max-w-2xl mx-auto">
-                        <h2 className="text-xl font-bold mb-4">New Encounter: {selectedPatient.mrn}</h2>
+                        <h2 className="text-xl font-bold mb-4">New Encounter: {selectedPatient.mrn_display || 'Protected patient'}</h2>
                         <form onSubmit={handleCreateEncounter} className="space-y-6">
                             {/* Symptoms */}
                             <div>
@@ -224,3 +224,4 @@ export default function ClinicalDesk() {
         </div>
     )
 }
+

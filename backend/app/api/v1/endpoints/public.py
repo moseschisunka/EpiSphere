@@ -4,6 +4,8 @@ from typing import Dict, Any, List
 
 from app.core.database import get_db
 from app.services.public_health_service import PublicHealthService
+from app.db.models import NewsArticle
+from app.schemas import news as news_schema
 
 router = APIRouter()
 
@@ -26,3 +28,8 @@ def get_public_map(db: Session = Depends(get_db)):
 def get_public_alerts(db: Session = Depends(get_db)):
     """Get sanitized alerts (Public)"""
     return PublicHealthService.get_public_alerts(db)
+
+@router.get("/news", response_model=List[news_schema.NewsArticle])
+def get_public_news(db: Session = Depends(get_db)):
+    """Get health news articles (Public)"""
+    return db.query(NewsArticle).filter(NewsArticle.is_public == True).order_by(NewsArticle.published_at.desc()).all()

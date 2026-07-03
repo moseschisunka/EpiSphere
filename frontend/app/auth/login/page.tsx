@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -87,7 +87,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-4 text-center text-gray-600">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Link href="/auth/register" className="text-blue-600 hover:text-blue-800">
             Register
           </Link>
@@ -96,3 +96,4 @@ export default function LoginPage() {
     </div>
   )
 }
+

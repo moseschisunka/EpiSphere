@@ -12,6 +12,7 @@ export default function UploadPage() {
   const [countries, setCountries] = useState<any[]>([])
   const [diseases, setDiseases] = useState<any[]>([])
   const [uploading, setUploading] = useState(false)
+  const [commit, setCommit] = useState(true)
   const [result, setResult] = useState<any>(null)
 
   useEffect(() => {
@@ -55,10 +56,10 @@ export default function UploadPage() {
     setResult(null)
 
     try {
-      const response = await casesApi.upload(file, Number(countryId), Number(diseaseId))
+      const response = await casesApi.upload(file, Number(countryId), Number(diseaseId), commit)
       setResult(response)
       
-      if (response.success) {
+      if (response.success && response.committed) {
         setTimeout(() => {
           router.push('/dashboard/global')
         }, 2000)
@@ -83,6 +84,7 @@ export default function UploadPage() {
           <li>Supported formats: CSV, XLSX, XLS</li>
           <li>Required columns: <code className="bg-gray-100 px-2 py-1 rounded">date</code>, <code className="bg-gray-100 px-2 py-1 rounded">daily_cases</code></li>
           <li>Optional columns: <code className="bg-gray-100 px-2 py-1 rounded">cumulative_cases</code>, <code className="bg-gray-100 px-2 py-1 rounded">daily_deaths</code>, <code className="bg-gray-100 px-2 py-1 rounded">cumulative_deaths</code></li>
+          <li>Governance columns: <code className="bg-gray-100 px-2 py-1 rounded">subnational_region</code>, <code className="bg-gray-100 px-2 py-1 rounded">reporting_level</code>, <code className="bg-gray-100 px-2 py-1 rounded">confirmation_status</code>, <code className="bg-gray-100 px-2 py-1 rounded">case_definition</code></li>
           <li>Date format: YYYY-MM-DD or any standard date format</li>
         </ul>
       </div>
@@ -143,12 +145,22 @@ export default function UploadPage() {
             )}
           </div>
 
+          <label className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={commit}
+              onChange={(e) => setCommit(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Commit valid records after validation
+          </label>
+
           <button
             type="submit"
             disabled={uploading}
             className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
-            {uploading ? 'Uploading...' : 'Upload Data'}
+            {uploading ? 'Processing...' : commit ? 'Validate and Commit' : 'Validate Only'}
           </button>
         </div>
       </form>
@@ -157,10 +169,30 @@ export default function UploadPage() {
         <div className={`mt-6 p-4 rounded-lg ${
           result.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
         }`}>
-          <p className="font-semibold">{result.success ? 'Success!' : 'Error'}</p>
+          <p className="font-semibold">{result.success ? 'Validation passed' : 'Validation failed'}</p>
           <p>{result.message}</p>
-          {result.success && result.rows_processed && (
-            <p className="mt-2">Processed {result.rows_processed} rows</p>
+          {result.batch_id && (
+            <p className="mt-2 text-sm">Batch #{result.batch_id} - Quality score {result.quality_score ?? 'n/a'} - {result.rows_valid ?? 0}/{result.rows_total ?? 0} valid rows</p>
+          )}
+          {result.quality_checks && result.quality_checks.length > 0 && (
+            <div className="mt-3">
+              <p className="font-semibold">Quality checks:</p>
+              <ul className="list-disc list-inside">
+                {result.quality_checks.map((check: any, idx: number) => (
+                  <li key={idx}>{check.check_name}: {check.passed ? 'passed' : 'needs review'}{check.message ? ` - ${check.message}` : ''}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {result.issues && result.issues.length > 0 && (
+            <div className="mt-3">
+              <p className="font-semibold">Row issues:</p>
+              <ul className="list-disc list-inside">
+                {result.issues.slice(0, 8).map((issue: any, idx: number) => (
+                  <li key={idx}>Row {issue.row_number}: {issue.message}</li>
+                ))}
+              </ul>
+            </div>
           )}
           {result.errors && result.errors.length > 0 && (
             <div className="mt-2">

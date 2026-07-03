@@ -2,8 +2,8 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { publicApi } from '../../lib/api'
-import PublicMap from '../../components/public/PublicMap'
+import { publicApi } from '../../../lib/api'
+import PublicMap from '../../../components/public/PublicMap'
 
 export default function PublicDashboard() {
     const [stats, setStats] = useState<any>(null)

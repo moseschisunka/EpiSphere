@@ -68,11 +68,13 @@ export const casesApi = {
     const response = await api.post('/cases', caseData)
     return response.data
   },
-  upload: async (file: File, countryId: number, diseaseId: number) => {
+  upload: async (file: File, countryId: number, diseaseId: number, commit: boolean = true, sourceSystemCode: string = 'manual_upload') => {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('country_id', countryId.toString())
     formData.append('disease_id', diseaseId.toString())
+    formData.append('commit', commit.toString())
+    formData.append('source_system_code', sourceSystemCode)
     const response = await api.post('/cases/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
@@ -200,8 +202,8 @@ export const interopApi = {
     const response = await api.get('/interop/logs')
     return response.data
   },
-  syncDHIS2: async (dataset: string, payload: any) => {
-    const response = await api.post('/interop/dhis2/sync', { dataset, payload })
+  syncDHIS2: async (dataset: string, payload: any, dryRun: boolean = false, mappingId?: number) => {
+    const response = await api.post('/interop/dhis2/sync', { dataset, payload, dry_run: dryRun, mapping_id: mappingId })
     return response.data
   }
 }
@@ -217,6 +219,10 @@ export const publicApi = {
   },
   getAlerts: async () => {
     const response = await api.get('/public/alerts')
+    return response.data
+  },
+  getNews: async () => {
+    const response = await api.get('/public/news')
     return response.data
   }
 }

@@ -1,4 +1,4 @@
-# Development requirements (without PostgreSQL dependencies)
+﻿# Development requirements (without PostgreSQL dependencies)
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
@@ -38,3 +38,7 @@ python-dotenv==1.0.0
 
 # Note: statsmodels, prophet, and torch are optional for basic functionality
 # Install separately if needed for forecasting
+
+# Testing
+pytest==7.4.3
+

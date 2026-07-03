@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { alertsApi } from '@/lib/api'
@@ -14,6 +14,7 @@ export default function AlertsPage() {
 
   useEffect(() => {
     loadAlerts()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters])
 
   const loadAlerts = async () => {
@@ -146,7 +147,7 @@ export default function AlertsPage() {
                   href={`/dashboard/country/${alert.country_id}`}
                   className="text-blue-600 hover:text-blue-800 font-semibold"
                 >
-                  View Country Dashboard →
+                  View Country Dashboard â†’
                 </Link>
               </div>
             </div>
@@ -156,3 +157,4 @@ export default function AlertsPage() {
     </div>
   )
 }
+

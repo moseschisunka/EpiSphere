@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+﻿from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 
 from app.api.v1.deps import allow_pharmacist, get_current_facility_user
 from app.core.database import get_db
 from app.db.models import User, Prescription, Dispensation, AuditLog, AuditAction, Encounter, Patient
 from app.schemas import pharmacy as schemas
+from app.core.privacy import mask_identifier
 
 router = APIRouter()
 
@@ -26,6 +27,8 @@ def list_pending_prescriptions(
     prescriptions = (
         db.query(Prescription)
         .join(Encounter)
+        .options(joinedload(Prescription.encounter).joinedload(Encounter.patient))
+        .options(joinedload(Prescription.encounter).joinedload(Encounter.clinician))
         .filter(Encounter.facility_id == current_user.facility_id)
         .filter(Prescription.is_dispensed == False)
         .all()
@@ -37,8 +40,8 @@ def list_pending_prescriptions(
         # Pydantic schema expects enriched fields. We need to populate them.
         # Ideally simpler to do DTO projection here
         detail = schemas.PrescriptionDetail.from_orm(rx)
-        detail.patient_mrn = rx.encounter.patient.mrn
-        detail.clinician_name = rx.encounter.clinician.full_name
+        detail.patient_mrn = mask_identifier(rx.encounter.patient.mrn) if rx.encounter.patient else "N/A"
+        detail.clinician_name = rx.encounter.clinician.full_name if rx.encounter.clinician else "Unknown"
         results.append(detail)
         
     return results
@@ -86,3 +89,4 @@ def dispense_medication(
     db.commit()
     db.refresh(dispensation)
     return dispensation
+

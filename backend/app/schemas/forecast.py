@@ -1,6 +1,6 @@
-"""Forecast schemas"""
+﻿"""Forecast schemas"""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, Dict, Any
 from datetime import date, datetime
 
@@ -25,8 +25,7 @@ class ForecastResponse(ForecastBase):
     country_name: Optional[str] = None
     disease_name: Optional[str] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ForecastRequest(BaseModel):
@@ -35,3 +34,4 @@ class ForecastRequest(BaseModel):
     disease_id: int
     horizon_days: int = 30
     model_type: Optional[str] = None  # If None, auto-select best model
+

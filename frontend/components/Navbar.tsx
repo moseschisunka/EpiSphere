@@ -20,6 +20,10 @@ export default function Navbar() {
           setUserRole(user.role.name)
         } catch (e) {
           console.error("Failed to fetch user", e)
+          // If fetch fails (e.g. invalid token), logout the user
+          localStorage.removeItem('access_token')
+          setIsAuthenticated(false)
+          setUserRole(null)
         }
       }
     }
@@ -63,6 +67,13 @@ export default function Navbar() {
                 }`}
             >
               Alerts
+            </Link>
+            <Link
+              href="/browse"
+              className={`px-3 py-2 rounded ${pathname === '/browse' ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+                }`}
+            >
+              Browse
             </Link>
 
             {isAuthenticated ? (

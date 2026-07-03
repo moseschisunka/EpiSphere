@@ -1,36 +1,49 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Navbar from '../../components/Navbar'
 import { pharmacyApi } from '../../lib/api'
 
+interface Prescription {
+    id: number;
+    drug_name: string;
+    quantity: number;
+    patient_mrn?: string;
+    clinician_name: string;
+}
+
 export default function PharmacyDesk() {
-    const [prescriptions, setPrescriptions] = useState<any[]>([])
+    const [prescriptions, setPrescriptions] = useState<Prescription[]>([])
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
 
-    useEffect(() => {
-        loadData()
-    }, [])
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         try {
+            setLoading(true)
             const data = await pharmacyApi.getPending()
             setPrescriptions(data)
+            setError(null)
         } catch (e) {
             console.error("Failed to load pharmacy data", e)
+            setError("Failed to load prescriptions")
         } finally {
             setLoading(false)
         }
-    }
+    }, [])
+
+    useEffect(() => {
+        loadData()
+    }, [loadData])
 
     const handleDispense = async (id: number) => {
         try {
             await pharmacyApi.dispense({ prescription_id: id, notes: 'Dispensed via Pharmacy Desk' })
-            // Optimistic update or reload
+            // Optimistic update
             setPrescriptions(prev => prev.filter(p => p.id !== id))
-            alert("Dispensed successfully")
         } catch (e) {
-            alert("Failed to dispense")
+            console.error("Failed to dispense", e)
+            // Ideally use a toast notification here
+            setError("Failed to dispense medication")
         }
     }
 
@@ -39,6 +52,12 @@ export default function PharmacyDesk() {
             <Navbar />
             <main className="container mx-auto px-4 py-8">
                 <h1 className="text-3xl font-bold text-gray-900 mb-6">Pharmacy Desk</h1>
+
+                {error && (
+                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                        <span className="block sm:inline">{error}</span>
+                    </div>
+                )}
 
                 <div className="bg-white rounded-lg shadow overflow-hidden">
                     <div className="p-4 border-b bg-gray-50">

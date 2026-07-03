@@ -2,14 +2,14 @@
 
 from typing import List, Optional
 from datetime import date, datetime
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_active_user, require_role
-from app.db.models import Case, Country, Disease, User, AuditLog, AuditAction
-from app.schemas.case import CaseCreate, CaseResponse, CaseUpdate, CaseBulkUpload, CaseStats
+from app.db.models import Case, Country, Disease, User, AuditLog, AuditAction, ImportBatch, ImportRowError
+from app.schemas.case import CaseCreate, CaseResponse, CaseUpdate, CaseBulkUpload, CaseStats, CaseUploadResult
 from app.services.case_service import CaseService
 from app.services.data_upload import DataUploadService
 
@@ -94,30 +94,67 @@ async def create_case(
     return new_case
 
 
-@router.post("/upload", status_code=status.HTTP_201_CREATED)
+@router.post("/upload", response_model=CaseUploadResult, status_code=status.HTTP_201_CREATED)
 async def upload_cases(
     file: UploadFile = File(...),
-    country_id: int = None,
-    disease_id: int = None,
+    country_id: int = Form(...),
+    disease_id: int = Form(...),
+    commit: bool = Form(True),
+    source_system_code: str = Form("manual_upload"),
     current_user: User = Depends(require_role(["country_data_officer", "admin", "epidemiologist"])),
     db: Session = Depends(get_db)
 ):
     """Upload cases from CSV/Excel file"""
-    if not country_id or not disease_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="country_id and disease_id are required"
-        )
-    
     upload_service = DataUploadService(db)
     result = await upload_service.upload_file(
         file=file,
         country_id=country_id,
         disease_id=disease_id,
-        user_id=current_user.id
+        user_id=current_user.id,
+        commit=commit,
+        source_system_code=source_system_code,
     )
     
     return result
+
+
+@router.get("/imports/{batch_id}")
+async def get_import_batch(
+    batch_id: int,
+    current_user: User = Depends(require_role(["country_data_officer", "admin", "epidemiologist"])),
+    db: Session = Depends(get_db),
+):
+    """Return import lineage, quality summary, and row-level issues for an upload batch."""
+    batch = db.query(ImportBatch).filter(ImportBatch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Import batch not found")
+
+    issues = db.query(ImportRowError).filter(ImportRowError.batch_id == batch_id).order_by(ImportRowError.row_number).all()
+    return {
+        "id": batch.id,
+        "filename": batch.filename,
+        "dataset_type": batch.dataset_type,
+        "status": batch.status.value if batch.status else None,
+        "rows_total": batch.rows_total,
+        "rows_valid": batch.rows_valid,
+        "rows_committed": batch.rows_committed,
+        "error_count": batch.error_count,
+        "warning_count": batch.warning_count,
+        "quality_score": batch.quality_score,
+        "uploaded_at": batch.uploaded_at,
+        "committed_at": batch.committed_at,
+        "metadata": batch.batch_metadata or {},
+        "issues": [
+            {
+                "row_number": issue.row_number,
+                "field_name": issue.field_name,
+                "severity": issue.severity.value if issue.severity else None,
+                "message": issue.message,
+                "raw_value": issue.raw_value,
+            }
+            for issue in issues
+        ],
+    }
 
 
 @router.get("/stats", response_model=List[CaseStats])

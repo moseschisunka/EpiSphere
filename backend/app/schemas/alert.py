@@ -1,6 +1,6 @@
-"""Alert schemas"""
+﻿"""Alert schemas"""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 from app.db.models import AlertSeverity, AlertStatus
@@ -30,8 +30,7 @@ class AlertResponse(AlertBase):
     country_name: Optional[str] = None
     disease_name: Optional[str] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AlertUpdate(BaseModel):
@@ -47,3 +46,4 @@ class AlertFilter(BaseModel):
     status: Optional[AlertStatus] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
+

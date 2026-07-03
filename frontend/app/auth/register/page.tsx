@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -164,26 +164,6 @@ export default function RegisterPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Role
-            </label>
-            <select
-              name="role_id"
-              value={formData.role_id}
-              onChange={handleChange}
-              className="border border-gray-300 rounded-lg px-4 py-2 w-full"
-            >
-              <option value={1}>Public User</option>
-              <option value={2}>Country Data Officer</option>
-              <option value={3}>Epidemiologist</option>
-              <option value={4}>Admin</option>
-            </select>
-            <p className="text-xs text-gray-500 mt-1">
-              Note: Admin and Epidemiologist roles may require approval
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
               Country (Optional)
             </label>
             {loadingCountries ? (
@@ -224,3 +204,4 @@ export default function RegisterPage() {
     </div>
   )
 }
+

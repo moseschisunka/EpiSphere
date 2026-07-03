@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
@@ -19,6 +19,7 @@ export default function CountryDashboard() {
     loadCountry()
     loadDiseases()
     loadDashboard()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countryId, selectedDisease])
 
   const loadCountry = async () => {
@@ -185,3 +186,4 @@ export default function CountryDashboard() {
     </div>
   )
 }
+

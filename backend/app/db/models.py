@@ -5,10 +5,10 @@ Production-ready schema with proper relationships and indexing
 
 from sqlalchemy import (
     Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text,
-    Date, Enum as SQLEnum, Index, JSON
+    Date, Enum as SQLEnum, Index, JSON, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from datetime import datetime
 import enum
 
@@ -74,6 +74,20 @@ class InteropStatus(str, enum.Enum):
     SUCCESS = "success"
     FAILURE = "failure"
     PENDING = "pending"
+
+
+class ImportStatus(str, enum.Enum):
+    PENDING = "pending"
+    VALIDATED = "validated"
+    COMMITTED = "committed"
+    REJECTED = "rejected"
+    FAILED = "failed"
+
+
+class QualitySeverity(str, enum.Enum):
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
 
 
 # Models
@@ -214,16 +228,27 @@ class Case(Base):
     cumulative_recovered = Column(Integer, default=0, nullable=True)
     subnational_region = Column(String(255), nullable=True)  # For subnational data
     source = Column(String(255), nullable=True)  # Data source
+    source_system_id = Column(Integer, ForeignKey("source_systems.id"), nullable=True, index=True)
+    import_batch_id = Column(Integer, ForeignKey("import_batches.id"), nullable=True, index=True)
+    reporting_period_start = Column(Date, nullable=True)
+    reporting_period_end = Column(Date, nullable=True)
+    reporting_level = Column(String(50), nullable=True)  # national, admin1, admin2, facility
+    case_definition = Column(String(100), nullable=True)
+    confirmation_status = Column(String(50), nullable=True)  # suspected, probable, confirmed
+    data_quality_score = Column(Float, nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     country = relationship("Country", back_populates="cases")
     disease = relationship("Disease", back_populates="cases")
+    source_system = relationship("SourceSystem", back_populates="cases")
+    import_batch = relationship("ImportBatch", back_populates="cases")
     
     # Composite indexes for time-series queries
     __table_args__ = (
         Index("idx_case_country_disease_date", "country_id", "disease_id", "date"),
+        Index("idx_case_lineage", "source_system_id", "import_batch_id"),
         Index("idx_case_date", "date"),
         Index("idx_case_created", "created_at"),
     )
@@ -347,6 +372,155 @@ class AuditLog(Base):
         return f"<AuditLog(user_id={self.user_id}, action='{self.action}', resource='{self.resource_type}')>"
 
 
+class SourceSystem(Base):
+    """External or internal system that provides public health data."""
+    __tablename__ = "source_systems"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    code = Column(String(100), nullable=False, unique=True, index=True)
+    system_type = Column(String(100), nullable=False, default="manual_upload")
+    owner = Column(String(255), nullable=True)
+    system_metadata = Column(JSON, nullable=True)
+    is_active = Column(Boolean, default=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    cases = relationship("Case", back_populates="source_system")
+    import_batches = relationship("ImportBatch", back_populates="source_system")
+
+
+class ImportBatch(Base):
+    """Durable lineage record for a data import, validation, and commit."""
+    __tablename__ = "import_batches"
+
+    id = Column(Integer, primary_key=True, index=True)
+    filename = Column(String(500), nullable=False)
+    dataset_type = Column(String(100), nullable=False, default="case_timeseries")
+    status = Column(SQLEnum(ImportStatus), default=ImportStatus.PENDING, nullable=False, index=True)
+    source_system_id = Column(Integer, ForeignKey("source_systems.id"), nullable=True, index=True)
+    country_id = Column(Integer, ForeignKey("countries.id"), nullable=True, index=True)
+    disease_id = Column(Integer, ForeignKey("diseases.id"), nullable=True, index=True)
+    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    uploaded_at = Column(DateTime, default=datetime.utcnow, index=True)
+    committed_at = Column(DateTime, nullable=True)
+    rows_total = Column(Integer, default=0)
+    rows_valid = Column(Integer, default=0)
+    rows_committed = Column(Integer, default=0)
+    error_count = Column(Integer, default=0)
+    warning_count = Column(Integer, default=0)
+    quality_score = Column(Float, nullable=True)
+    batch_metadata = Column(JSON, nullable=True)
+
+    source_system = relationship("SourceSystem", back_populates="import_batches")
+    country = relationship("Country")
+    disease = relationship("Disease")
+    uploader = relationship("User")
+    row_errors = relationship("ImportRowError", back_populates="batch", cascade="all, delete-orphan")
+    quality_checks = relationship("DataQualityCheck", back_populates="batch", cascade="all, delete-orphan")
+    cases = relationship("Case", back_populates="import_batch")
+
+    __table_args__ = (
+        Index("idx_import_batch_status_uploaded", "status", "uploaded_at"),
+        Index("idx_import_batch_scope", "country_id", "disease_id", "dataset_type"),
+    )
+
+
+class ImportRowError(Base):
+    """Row-level validation issue captured during upload."""
+    __tablename__ = "import_row_errors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    batch_id = Column(Integer, ForeignKey("import_batches.id"), nullable=False, index=True)
+    row_number = Column(Integer, nullable=False)
+    field_name = Column(String(100), nullable=True)
+    severity = Column(SQLEnum(QualitySeverity), default=QualitySeverity.ERROR, nullable=False, index=True)
+    message = Column(Text, nullable=False)
+    raw_value = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    batch = relationship("ImportBatch", back_populates="row_errors")
+
+    __table_args__ = (
+        Index("idx_import_row_error_batch_row", "batch_id", "row_number"),
+    )
+
+
+class DataQualityCheck(Base):
+    """Batch-level data quality check for completeness, validity, timeliness, and uniqueness."""
+    __tablename__ = "data_quality_checks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    batch_id = Column(Integer, ForeignKey("import_batches.id"), nullable=False, index=True)
+    check_name = Column(String(100), nullable=False)
+    severity = Column(SQLEnum(QualitySeverity), default=QualitySeverity.INFO, nullable=False)
+    passed = Column(Boolean, nullable=False)
+    metric_value = Column(Float, nullable=True)
+    threshold = Column(Float, nullable=True)
+    message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    batch = relationship("ImportBatch", back_populates="quality_checks")
+
+
+class CodeSystem(Base):
+    """Terminology code system such as ICD-10, ICD-11, SNOMED CT, LOINC, or DHIS2."""
+    __tablename__ = "code_systems"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    uri = Column(String(500), nullable=True)
+    version = Column(String(100), nullable=True)
+    owner = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    concepts = relationship("StandardConcept", back_populates="code_system", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("name", "version", name="uq_code_system_name_version"),
+    )
+
+
+class StandardConcept(Base):
+    """A coded disease, diagnosis, lab observation, symptom, medicine, or DHIS2 element."""
+    __tablename__ = "standard_concepts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code_system_id = Column(Integer, ForeignKey("code_systems.id"), nullable=False, index=True)
+    code = Column(String(100), nullable=False)
+    display = Column(String(255), nullable=False)
+    concept_type = Column(String(100), nullable=False, index=True)
+    concept_metadata = Column(JSON, nullable=True)
+    is_active = Column(Boolean, default=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    code_system = relationship("CodeSystem", back_populates="concepts")
+
+    __table_args__ = (
+        UniqueConstraint("code_system_id", "code", name="uq_standard_concept_code"),
+        Index("idx_standard_concept_type_code", "concept_type", "code"),
+    )
+
+
+class ConceptMap(Base):
+    """Mapping from local/source codes to standard concepts."""
+    __tablename__ = "concept_maps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source_system_id = Column(Integer, ForeignKey("source_systems.id"), nullable=True, index=True)
+    source_code = Column(String(255), nullable=False)
+    source_display = Column(String(255), nullable=True)
+    target_concept_id = Column(Integer, ForeignKey("standard_concepts.id"), nullable=False, index=True)
+    map_type = Column(String(50), default="equivalent")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    source_system = relationship("SourceSystem")
+    target_concept = relationship("StandardConcept")
+
+    __table_args__ = (
+        UniqueConstraint("source_system_id", "source_code", "target_concept_id", name="uq_concept_map_source_target"),
+    )
+
+
 class Facility(Base):
     """Health facilities"""
     __tablename__ = "facilities"
@@ -355,9 +529,14 @@ class Facility(Base):
     name = Column(String(255), nullable=False)
     type = Column(SQLEnum(FacilityType), nullable=False)
     country_id = Column(Integer, ForeignKey("countries.id"), nullable=False)
-    location = Column(String(255), nullable=True) # "Lat,Lon" or address
+    location = Column(String(255), nullable=True) # Legacy display address or lat,lon text
+    facility_code = Column(String(100), nullable=True, index=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     province = Column(String(100), nullable=True)
     district = Column(String(100), nullable=True)
+    admin1_code = Column(String(100), nullable=True, index=True)
+    admin2_code = Column(String(100), nullable=True, index=True)
     
     # Consent Setting
     public_visible = Column(Boolean, default=False)
@@ -372,6 +551,12 @@ class Facility(Base):
     def __repr__(self):
         return f"<Facility(name='{self.name}', type='{self.type}')>"
 
+    __table_args__ = (
+        UniqueConstraint("country_id", "facility_code", name="uq_facility_country_code"),
+        Index("idx_facility_admin", "country_id", "admin1_code", "admin2_code"),
+        Index("idx_facility_geo", "latitude", "longitude"),
+    )
+
 
 class Patient(Base):
     """
@@ -382,7 +567,8 @@ class Patient(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     facility_id = Column(Integer, ForeignKey("facilities.id"), nullable=False, index=True)
-    mrn = Column(String(255), nullable=True) # Medical Record Number (Should be encrypted in app)
+    mrn = Column(String(255), nullable=True) # Medical Record Number, never returned raw by API
+    mrn_hash = Column(String(64), nullable=True, index=True)
     dob = Column(Date, nullable=True)
     gender = Column(String(20), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -392,6 +578,7 @@ class Patient(Base):
 
     __table_args__ = (
         Index("idx_patient_facility", "facility_id"),
+        Index("idx_patient_facility_mrn_hash", "facility_id", "mrn_hash"),
     )
 
 
@@ -469,5 +656,41 @@ class InteropLog(Base):
     status = Column(SQLEnum(InteropStatus), default=InteropStatus.PENDING)
     dataset_type = Column(String(50), nullable=False) # e.g. "weekly_aggregate"
     details = Column(JSON, nullable=True) # Payload summary or error message
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    external_id = Column(String(255), nullable=True, index=True)
+    mapping_id = Column(Integer, ForeignKey("dhis2_mappings.id"), nullable=True, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class DHIS2Mapping(Base):
+    """Named DHIS2 mapping contract used to validate outbound payloads."""
+    __tablename__ = "dhis2_mappings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    dataset = Column(String(100), nullable=False, unique=True, index=True)
+    endpoint_path = Column(String(255), nullable=False)
+    payload_type = Column(String(50), nullable=False, default="aggregate")
+    required_fields = Column(JSON, nullable=False, default=list)
+    description = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class NewsArticle(Base):
+    """Health news articles for public browse"""
+    __tablename__ = "news_articles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    summary = Column(Text, nullable=False)
+    content = Column(Text, nullable=False)
+    source = Column(String(255), nullable=True) # e.g. "WHO", "CDC", "EpiSphere"
+    image_url = Column(String(500), nullable=True)
+    published_at = Column(DateTime, default=datetime.utcnow, index=True)
+    is_public = Column(Boolean, default=True)
+    
+    def __repr__(self):
+        return f"<NewsArticle(title='{self.title}')>"
+
+
+
 

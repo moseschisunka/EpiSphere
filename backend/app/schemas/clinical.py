@@ -1,11 +1,12 @@
-from pydantic import BaseModel
-from typing import Optional, List, Any
+﻿from pydantic import BaseModel, Field, computed_field, ConfigDict
+from typing import Optional, List
 from datetime import date, datetime
 from app.db.models import DiagnosisType
+from app.core.privacy import mask_identifier
 
 # Patient Schemas
 class PatientBase(BaseModel):
-    mrn: Optional[str] = None
+    mrn: Optional[str] = Field(default=None, exclude=True)
     dob: Optional[date] = None
     gender: Optional[str] = None
 
@@ -17,8 +18,12 @@ class Patient(PatientBase):
     facility_id: int
     created_at: datetime
 
-    class Config:
-        orm_mode = True
+    @computed_field
+    @property
+    def mrn_display(self) -> Optional[str]:
+        return mask_identifier(self.mrn)
+
+    model_config = ConfigDict(from_attributes=True)
 
 # Diagnosis Schemas
 class DiagnosisBase(BaseModel):
@@ -34,8 +39,7 @@ class Diagnosis(DiagnosisBase):
     id: int
     encounter_id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 # Prescription Schemas (Embed in Encounter for Creation)
 class PrescriptionBase(BaseModel):
@@ -52,8 +56,7 @@ class Prescription(PrescriptionBase):
     issued_at: datetime
     is_dispensed: bool
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 # Encounter Schemas
 class EncounterBase(BaseModel):
@@ -73,5 +76,5 @@ class Encounter(EncounterBase):
     diagnoses: List[Diagnosis] = []
     prescriptions: List[Prescription] = []
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
+

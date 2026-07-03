@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { dashboardApi, countriesApi, diseasesApi } from '@/lib/api'
@@ -15,6 +15,7 @@ export default function GlobalDashboard() {
   useEffect(() => {
     loadDiseases()
     loadDashboard()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDisease])
 
   const loadDiseases = async () => {
@@ -126,3 +127,4 @@ export default function GlobalDashboard() {
     </div>
   )
 }
+

@@ -14,6 +14,9 @@ class GlobalStats(BaseModel):
     active_alerts: int
     date_range_start: date
     date_range_end: date
+    latest_data_date: Optional[date] = None
+    data_completeness: Optional[float] = None
+    median_reporting_lag_days: Optional[float] = None
 
 
 class CountryStats(BaseModel):
@@ -31,6 +34,9 @@ class CountryStats(BaseModel):
     latest_date: date
     daily_cases_7day_avg: Optional[float] = None
     growth_rate: Optional[float] = None
+    reporting_lag_days: Optional[int] = None
+    data_quality_score: Optional[float] = None
+    data_freshness_status: Optional[str] = None
 
 
 class TimeSeriesPoint(BaseModel):

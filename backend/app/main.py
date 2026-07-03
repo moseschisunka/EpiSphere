@@ -1,4 +1,4 @@
-"""
+﻿"""
 EpiSphere AI - Main FastAPI Application
 Production-ready global public health surveillance platform
 """
@@ -9,19 +9,17 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
-from app.core.database import engine, Base
 from app.api.v1.api import api_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan events"""
-    # Startup: Create database tables (using sync engine for compatibility)
-    from app.core.database import sync_engine
-    Base.metadata.create_all(bind=sync_engine)
+    """Application lifespan events.
+
+    Schema changes are managed by Alembic migrations. Do not mutate production
+    schema at application startup.
+    """
     yield
-    # Shutdown: Cleanup if needed
-    pass
 
 
 app = FastAPI(
@@ -46,7 +44,7 @@ app.add_middleware(
 if not settings.DEBUG:
     app.add_middleware(
         TrustedHostMiddleware,
-        allowed_hosts=["episphere.ai", "*.episphere.ai"]
+        allowed_hosts=settings.ALLOWED_HOSTS
     )
 
 # Include API router

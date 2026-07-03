@@ -1,6 +1,6 @@
-"""User schemas"""
+﻿"""User schemas"""
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional
 from datetime import datetime
 
@@ -21,21 +21,33 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     username: Optional[str] = None
     full_name: Optional[str] = None
-    is_active: Optional[bool] = None
     country_id: Optional[int] = None
+
+
+class UserAdminUpdate(UserUpdate):
+    is_active: Optional[bool] = None
+    is_verified: Optional[bool] = None
+    facility_id: Optional[int] = None
+
+
+class UserRoleUpdate(BaseModel):
+    role_id: int
+    facility_id: Optional[int] = None
+    country_id: Optional[int] = None
+    is_verified: bool = True
 
 
 class UserResponse(UserBase):
     id: int
     role_id: int
     country_id: Optional[int] = None
+    facility_id: Optional[int] = None
     is_active: bool
     is_verified: bool
     created_at: datetime
     last_login: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserLogin(BaseModel):
@@ -50,3 +62,4 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     user_id: Optional[int] = None
+

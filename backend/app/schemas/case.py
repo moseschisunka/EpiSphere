@@ -1,7 +1,7 @@
 """Case schemas"""
 
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, ConfigDict
+from typing import Optional, Any
 from datetime import date, datetime
 
 
@@ -17,6 +17,14 @@ class CaseBase(BaseModel):
     cumulative_recovered: Optional[int] = None
     subnational_region: Optional[str] = None
     source: Optional[str] = None
+    source_system_id: Optional[int] = None
+    import_batch_id: Optional[int] = None
+    reporting_period_start: Optional[date] = None
+    reporting_period_end: Optional[date] = None
+    reporting_level: Optional[str] = None
+    case_definition: Optional[str] = None
+    confirmation_status: Optional[str] = None
+    data_quality_score: Optional[float] = None
     notes: Optional[str] = None
 
 
@@ -39,8 +47,7 @@ class CaseResponse(CaseBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CaseBulkUpload(BaseModel):
@@ -64,3 +71,39 @@ class CaseStats(BaseModel):
     incidence_per_100k: Optional[float] = None
     cfr: Optional[float] = None  # Case Fatality Rate
     growth_rate: Optional[float] = None  # 7-day growth rate
+
+
+
+class UploadRowIssue(BaseModel):
+    row_number: int
+    field_name: Optional[str] = None
+    severity: str
+    message: str
+    raw_value: Optional[str] = None
+
+
+class UploadQualityCheck(BaseModel):
+    check_name: str
+    severity: str
+    passed: bool
+    metric_value: Optional[float] = None
+    threshold: Optional[float] = None
+    message: Optional[str] = None
+
+
+class CaseUploadResult(BaseModel):
+    success: bool
+    committed: bool
+    batch_id: int
+    status: str
+    rows_total: int
+    rows_valid: int
+    rows_committed: int
+    error_count: int
+    warning_count: int
+    quality_score: Optional[float] = None
+    errors: list[str] = []
+    issues: list[UploadRowIssue] = []
+    quality_checks: list[UploadQualityCheck] = []
+    message: str
+    metadata: dict[str, Any] = {}

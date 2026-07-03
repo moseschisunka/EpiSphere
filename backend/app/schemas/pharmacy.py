@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+﻿from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 from app.schemas.clinical import Prescription
@@ -15,10 +15,11 @@ class Dispensation(DispensationBase):
     pharmacist_id: int
     dispensed_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 class PrescriptionDetail(Prescription):
     """Extended prescription details for pharmacist view"""
     patient_mrn: Optional[str] = None
     clinician_name: Optional[str] = None
+
+
