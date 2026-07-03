@@ -6,15 +6,15 @@ services:
     image: timescale/timescaledb:latest-pg15
     container_name: episphere_postgres
     environment:
-      POSTGRES_USER: episphere
-      POSTGRES_PASSWORD: episphere_password
-      POSTGRES_DB: episphere_db
+      POSTGRES_USER: ${POSTGRES_USER:-episphere}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-episphere_password}
+      POSTGRES_DB: ${POSTGRES_DB:-episphere_db}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U episphere"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-episphere}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -40,23 +40,21 @@ services:
       dockerfile: Dockerfile
     container_name: episphere_backend
     environment:
-      DATABASE_URL: postgresql://episphere:episphere_password@postgres:5432/episphere_db
+      DATABASE_URL: postgresql://${POSTGRES_USER:-episphere}:${POSTGRES_PASSWORD:-episphere_password}@postgres:5432/${POSTGRES_DB:-episphere_db}
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
+      SECRET_KEY: ${SECRET_KEY:-change-this-in-development}
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
       CORS_ORIGINS: http://localhost:3000,http://localhost:3001
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
       - backend_uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   # Next.js Frontend
   frontend:
@@ -68,10 +66,6 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:
       - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
     depends_on:
       - backend
 

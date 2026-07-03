@@ -44,6 +44,7 @@ Thumbs.db
 
 # Database
 *.db
+*.db.old
 *.sqlite
 
 # Uploads

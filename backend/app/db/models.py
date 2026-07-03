@@ -269,6 +269,7 @@ class Alert(Base):
     probability_score = Column(Float, nullable=False)  # 0.0 to 1.0
     detection_method = Column(String(100), nullable=False)  # e.g., "isolation_forest", "cusum"
     explanation = Column(Text, nullable=False)  # Why alert was triggered
+    detection_metadata = Column(JSON, nullable=True)  # Method scores, thresholds, preprocessing, model lineage
     triggered_at = Column(DateTime, default=datetime.utcnow, index=True)
     investigated_at = Column(DateTime, nullable=True)
     resolved_at = Column(DateTime, nullable=True)

@@ -1,7 +1,7 @@
-﻿"""Alert schemas"""
+"""Alert schemas"""
 
 from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from typing import Optional, Any
 from datetime import datetime
 from app.db.models import AlertSeverity, AlertStatus
 
@@ -13,6 +13,7 @@ class AlertBase(BaseModel):
     probability_score: float
     detection_method: str
     explanation: str
+    detection_metadata: Optional[dict[str, Any]] = None
 
 
 class AlertCreate(AlertBase):

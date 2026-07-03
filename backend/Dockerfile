@@ -13,14 +13,22 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Create a non-root user and group
+RUN groupadd -r episphere && useradd -r -g episphere episphere
+
 # Copy application code
 COPY . .
 
-# Create uploads directory
-RUN mkdir -p /app/uploads
+# Create uploads directory, make entrypoint executable, and change ownership
+RUN mkdir -p /app/uploads \
+    && chmod +x entrypoint.sh \
+    && chown -R episphere:episphere /app
+
+# Switch to non-root user
+USER episphere
 
 # Expose port
 EXPOSE 8000
 
-# Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the application through the entrypoint
+ENTRYPOINT ["./entrypoint.sh"]
