@@ -4,106 +4,165 @@
 
 import React, { useState, useEffect } from 'react'
 import { publicApi } from '../../lib/api'
-import Link from 'next/link'
+import { Card, CardContent } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
+import { Newspaper, Loader2, ArrowRight, X } from 'lucide-react'
 
 interface NewsArticle {
-    id: number;
-    title: string;
-    summary: string;
-    content: string;
-    source: string;
-    image_url: string;
-    published_at: string;
+  id: number
+  title: string
+  summary: string
+  content: string
+  source: string
+  image_url: string
+  published_at: string
 }
 
 export default function BrowsePage() {
-    const [articles, setArticles] = useState<NewsArticle[]>([])
-    const [loading, setLoading] = useState(true)
-    const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null)
+  const [articles, setArticles] = useState<NewsArticle[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedArticle, setSelectedArticle] = useState<NewsArticle | null>(null)
 
-    useEffect(() => {
-        publicApi.getNews().then(setArticles).catch(console.error).finally(() => setLoading(false))
-    }, [])
+  useEffect(() => {
+    publicApi.getNews()
+      .then(setArticles)
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
 
-    return (
-        <div className="min-h-screen bg-gray-50">
-            <main className="container mx-auto px-4 py-8">
-                <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-3xl font-bold text-gray-900">Health News & Trends</h1>
-                    <div className="text-sm text-gray-500">Curated by EpiSphere</div>
-                </div>
-
-                {loading ? (
-                    <div className="text-center py-12">
-                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-                        <p className="mt-2 text-gray-500">Loading latest updates...</p>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                        {articles.map(article => (
-                            <div key={article.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300 flex flex-col">
-                                <div className="h-48 bg-gray-200 relative overflow-hidden">
-                                    {/* Placeholder for real images if implementation allows external images */}
-                                    <div className="absolute inset-0 bg-blue-100 flex items-center justify-center text-blue-300">
-                                        <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" /></svg>
-                                    </div>
-                                    {article.image_url && (
-                                        <img src={article.image_url} alt={article.title} className="w-full h-full object-cover absolute inset-0" onError={(e) => e.currentTarget.style.display = 'none'} />
-                                    )}
-                                </div>
-                                <div className="p-6 flex-1 flex flex-col">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded">{article.source || 'General'}</span>
-                                        <span className="text-xs text-gray-400">{new Date(article.published_at).toLocaleDateString()}</span>
-                                    </div>
-                                    <h2 className="text-xl font-bold text-gray-900 mb-2">{article.title}</h2>
-                                    <p className="text-gray-600 mb-4 flex-1 line-clamp-3">{article.summary}</p>
-                                    <button
-                                        onClick={() => setSelectedArticle(article)}
-                                        className="text-blue-600 font-medium hover:text-blue-800 self-start mt-auto"
-                                    >
-                                        Read Full Story &rarr;
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </main>
-
-            {/* Reading Modal */}
-            {selectedArticle && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setSelectedArticle(null)}>
-                    <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                        <div className="p-6">
-                            <div className="flex justify-between items-start mb-4">
-                                <h2 className="text-2xl font-bold text-gray-900">{selectedArticle.title}</h2>
-                                <button onClick={() => setSelectedArticle(null)} className="text-gray-400 hover:text-gray-600">
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                                </button>
-                            </div>
-                            <div className="flex items-center gap-4 text-sm text-gray-500 mb-6 border-b pb-4">
-                                <span>{selectedArticle.source}</span>
-                                <span>&bull;</span>
-                                <span>{new Date(selectedArticle.published_at).toLocaleDateString()}</span>
-                            </div>
-                            <div className="prose max-w-none text-gray-700">
-                                <p className="whitespace-pre-wrap">{selectedArticle.content}</p>
-                            </div>
-                            <div className="mt-8 pt-4 border-t flex justify-end">
-                                <button
-                                    onClick={() => setSelectedArticle(null)}
-                                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                                >
-                                    Close
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+  return (
+    <div className="min-h-screen bg-background">
+      <main className="container mx-auto px-4 py-8 max-w-7xl">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4">
+          <div>
+            <h1 className="text-4xl font-black tracking-tight text-foreground">Health News & Trends</h1>
+            <p className="text-muted-foreground mt-2">Curated global health intelligence and outbreak updates</p>
+          </div>
         </div>
-    )
+
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Card key={i} className="animate-pulse overflow-hidden h-[400px]">
+                <div className="h-48 bg-muted"></div>
+                <CardContent className="p-6 mt-4">
+                  <div className="h-6 bg-muted rounded w-3/4 mb-4"></div>
+                  <div className="h-4 bg-muted rounded w-full mb-2"></div>
+                  <div className="h-4 bg-muted rounded w-5/6"></div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {articles.map(article => (
+              <Card 
+                key={article.id} 
+                variant="elevated" 
+                className="overflow-hidden flex flex-col hover:border-accent/50 transition-all duration-300 group cursor-pointer"
+                onClick={() => setSelectedArticle(article)}
+              >
+                <div className="h-48 bg-muted relative overflow-hidden">
+                  <div className="absolute inset-0 bg-blue-500/10 flex items-center justify-center text-blue-500/40">
+                    <Newspaper className="w-12 h-12" />
+                  </div>
+                  {article.image_url && (
+                    <img 
+                      src={article.image_url} 
+                      alt={article.title} 
+                      className="w-full h-full object-cover absolute inset-0 group-hover:scale-105 transition-transform duration-500" 
+                      onError={(e) => (e.currentTarget.style.display = 'none')} 
+                    />
+                  )}
+                  <div className="absolute top-4 left-4">
+                    <Badge variant="info" className="shadow-lg backdrop-blur-md bg-background/90 text-foreground">
+                      {article.source || 'Intelligence'}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="p-6 flex-1 flex flex-col bg-card">
+                  <div className="text-xs text-muted-foreground mb-3 font-medium">
+                    {new Date(article.published_at).toLocaleDateString(undefined, {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </div>
+                  <h2 className="text-xl font-bold text-foreground mb-3 line-clamp-2 leading-tight group-hover:text-blue-500 transition-colors">
+                    {article.title}
+                  </h2>
+                  <p className="text-muted-foreground mb-4 flex-1 line-clamp-3 text-sm leading-relaxed">
+                    {article.summary}
+                  </p>
+                  <div className="text-blue-500 font-semibold text-sm flex items-center gap-1 mt-auto">
+                    Read Full Story <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </main>
+
+      {/* Reading Modal */}
+      {selectedArticle && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div 
+            className="bg-card rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-white/10 animate-in slide-in-from-bottom-8 duration-300"
+            onClick={e => e.stopPropagation()}
+          >
+            {selectedArticle.image_url && (
+              <div className="h-64 relative shrink-0">
+                <img 
+                  src={selectedArticle.image_url} 
+                  alt={selectedArticle.title} 
+                  className="w-full h-full object-cover" 
+                  onError={(e) => (e.currentTarget.style.display = 'none')} 
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
+                <button 
+                  onClick={() => setSelectedArticle(null)} 
+                  className="absolute top-4 right-4 p-2 bg-black/40 hover:bg-black/60 rounded-full text-white backdrop-blur-md transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            )}
+            
+            <div className="p-8 overflow-y-auto">
+              {!selectedArticle.image_url && (
+                <div className="flex justify-end mb-4">
+                  <button onClick={() => setSelectedArticle(null)} className="text-muted-foreground hover:text-foreground">
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+              )}
+              
+              <div className="flex items-center gap-3 text-sm text-blue-500 font-semibold mb-4">
+                <Badge variant="info" className="border-blue-500/30 text-blue-500 bg-blue-500/10">
+                  {selectedArticle.source}
+                </Badge>
+                <span className="text-muted-foreground font-normal">
+                  {new Date(selectedArticle.published_at).toLocaleDateString(undefined, {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                </span>
+              </div>
+              
+              <h2 className="text-3xl font-black text-foreground mb-6 leading-tight">
+                {selectedArticle.title}
+              </h2>
+              
+              <div className="prose prose-slate dark:prose-invert max-w-none prose-p:leading-relaxed prose-p:text-muted-foreground">
+                <p className="whitespace-pre-wrap">{selectedArticle.content}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
-
-

@@ -213,11 +213,58 @@ export const publicApi = {
   }
 }
 
-export const facilitySettingsApi = {
-  updateConsent: async (facilityId: number, visible: boolean) => {
-    const response = await api.put(`/facilities/${facilityId}/consent`, null, { params: { public_visible: visible } })
+export const newsApi = {
+  list: async (params?: any) => {
+    const response = await api.get('/news', { params })
+    return response.data
+  },
+  get: async (id: number) => {
+    const response = await api.get(`/news/${id}`)
+    return response.data
+  },
+  create: async (data: any) => {
+    const response = await api.post('/news', data)
+    return response.data
+  },
+  update: async (id: number, data: any) => {
+    const response = await api.put(`/news/${id}`, data)
+    return response.data
+  },
+  delete: async (id: number) => {
+    const response = await api.delete(`/news/${id}`)
+    return response.data
+  }
+}
+
+export const covidIngestApi = {
+  seedCountries: async () => {
+    const response = await api.post('/covid19/seed-countries')
+    return response.data
+  },
+  triggerIngest: async (isoCodes?: string[]) => {
+    const response = await api.post('/covid19/ingest', null, { params: { iso_codes: isoCodes?.join(',') } })
+    return response.data
+  },
+  getStatus: async () => {
+    const response = await api.get('/covid19/status')
+    return response.data
+  }
+}
+
+export const locationsApi = {
+  getHierarchy: async (params?: any) => {
+    const response = await api.get('/locations/hierarchy', { params })
+    return response.data
+  },
+  getProvinces: async (countryId: number) => {
+    const response = await api.get('/locations/provinces', { params: { country_id: countryId } })
+    return response.data
+  },
+  getDistricts: async (countryId: number, province: string) => {
+    const response = await api.get('/locations/districts', { params: { country_id: countryId, province } })
     return response.data
   }
 }
 
 export default api
+

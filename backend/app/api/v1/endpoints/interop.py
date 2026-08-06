@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from typing import List, Optional
+from datetime import datetime, date
 
 from app.api.v1.deps import allow_admin
 from app.core.database import get_db
-from app.db.models import User, InteropLog
+from app.db.models import User, InteropLog, Case, Disease, Country, InteropDirection, InteropStatus
 from app.schemas.interop import DHIS2SyncRequest, DHIS2SyncResponse
+from app.schemas.interop_extract import DataExtractResponse, AggregateCaseMetric, WebhookPayload
 from app.services.interop_service import InteropService
 
 router = APIRouter()
@@ -39,3 +42,95 @@ def get_interop_logs(
 ):
     """View interop logs."""
     return db.query(InteropLog).order_by(InteropLog.timestamp.desc()).offset(skip).limit(limit).all()
+
+
+@router.get("/extract", response_model=DataExtractResponse)
+def extract_deidentified_data(
+    disease_id: Optional[int] = Query(None, description="Filter by disease ID"),
+    disease_name: Optional[str] = Query(None, description="Filter by disease name (e.g., COVID-19)"),
+    country_id: Optional[int] = Query(None, description="Filter by country ID"),
+    iso_code: Optional[str] = Query(None, description="Filter by ISO 3-letter code"),
+    start_date: Optional[date] = Query(None, description="Filter by start date YYYY-MM-DD"),
+    end_date: Optional[date] = Query(None, description="Filter by end date YYYY-MM-DD"),
+    limit: int = Query(500, ge=1, le=5000),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(allow_admin)
+):
+    """
+    Export de-identified aggregate surveillance case records for clinical registrars & EHR systems.
+    Guarantees strict privacy standards: returns zero personal health identifiers or MRNs.
+    """
+    query = db.query(Case).join(Country).join(Disease)
+
+    if disease_id:
+        query = query.filter(Case.disease_id == disease_id)
+    elif disease_name:
+        query = query.filter(Disease.name.ilike(f"%{disease_name}%"))
+
+    if country_id:
+        query = query.filter(Case.country_id == country_id)
+    elif iso_code:
+        query = query.filter(Country.iso_code == iso_code.upper())
+
+    if start_date:
+        query = query.filter(Case.date >= start_date)
+    if end_date:
+        query = query.filter(Case.date <= end_date)
+
+    records = query.order_by(Case.date.desc()).limit(limit).all()
+
+    metrics = [
+        AggregateCaseMetric(
+            disease_name=c.disease.name,
+            country_name=c.country.name,
+            iso_code=c.country.iso_code,
+            date=c.date.isoformat(),
+            daily_cases=c.daily_cases or 0,
+            daily_deaths=c.daily_deaths or 0,
+            daily_recovered=c.daily_recovered or 0,
+            cumulative_cases=c.cumulative_cases or 0,
+            cumulative_deaths=c.cumulative_deaths or 0,
+            subnational_region=c.subnational_region,
+            source=c.source or "EpiSphere Surveillance Network",
+        )
+        for c in records
+    ]
+
+    return DataExtractResponse(
+        status="success",
+        de_identified=True,
+        total_records=len(metrics),
+        extracted_at=datetime.utcnow().isoformat(),
+        metrics=metrics,
+    )
+
+
+@router.post("/webhook")
+def receive_webhook(
+    payload: WebhookPayload,
+    db: Session = Depends(get_db)
+):
+    """
+    Receive inbound webhook events from external EHR, LIMS, or DHIS2 systems.
+    Logs event into InteropLog audit ledger.
+    """
+    log_entry = InteropLog(
+        target_system=payload.source_system,
+        direction=InteropDirection.INBOUND,
+        status=InteropStatus.SUCCESS,
+        payload_hash=str(hash(str(payload.data))),
+        request_payload=payload.data,
+        response_payload={"received": True, "event": payload.event_type},
+        timestamp=datetime.utcnow()
+    )
+    db.add(log_entry)
+    db.commit()
+    db.refresh(log_entry)
+
+    return {
+        "status": "received",
+        "log_id": log_entry.id,
+        "event_type": payload.event_type,
+        "timestamp": log_entry.timestamp.isoformat()
+    }
+

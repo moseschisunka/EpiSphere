@@ -4,13 +4,21 @@ import type { NextRequest } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    console.log('Login request body:', body);
+    
     const { username, password } = body;
+    console.log('Extracted:', { username, password });
+
+    if (!username || !password) {
+      return NextResponse.json({ detail: 'Missing username or password' }, { status: 400 });
+    }
 
     const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
     const apiBaseUrl = rawApiUrl.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
 
     // Create form data as required by OAuth2PasswordRequestForm
     const formData = new URLSearchParams();
+    formData.append('grant_type', 'password');
     formData.append('username', username);
     formData.append('password', password);
 

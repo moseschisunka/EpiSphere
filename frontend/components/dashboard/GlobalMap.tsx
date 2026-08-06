@@ -1,12 +1,7 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
-import * as echarts from 'echarts/core';
-import { MapChart } from 'echarts/charts';
-import { TooltipComponent, VisualMapComponent } from 'echarts/components';
-import { CanvasRenderer } from 'echarts/renderers';
-
-echarts.use([MapChart, TooltipComponent, VisualMapComponent, CanvasRenderer]);
+import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
+import 'leaflet/dist/leaflet.css'
 
 interface GlobalMapProps {
   countryStats: Array<{
@@ -14,64 +9,69 @@ interface GlobalMapProps {
     country_name: string
     iso_code: string
     total_cases: number
+    latitude?: number
+    longitude?: number
   }>
 }
 
 export default function GlobalMap({ countryStats }: GlobalMapProps) {
-  const chartRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!chartRef.current || !countryStats || countryStats.length === 0) return
-
-    const chart = echarts.init(chartRef.current)
-
-    // Prepare data for map
-    const mapData = countryStats.map((stat) => ({
-      name: stat.country_name,
-      value: stat.total_cases,
-    }))
-
-    const option = {
-      tooltip: {
-        trigger: 'item',
-        formatter: '{b}: {c} cases',
-      },
-      visualMap: {
-        min: 0,
-        max: Math.max(...countryStats.map((s) => s.total_cases)),
-        inRange: {
-          color: ['#e0f2fe', '#0284c7'],
-        },
-        text: ['High', 'Low'],
-        calculable: true,
-      },
-      series: [
-        {
-          name: 'Cases',
-          type: 'map',
-          map: 'world',
-          data: mapData,
-          emphasis: {
-            label: {
-              show: true,
-            },
-          },
-        },
-      ],
-    }
-
-    // Note: In production, you would need to register the world map
-    // For now, this is a placeholder that would work with proper map registration
-    chart.setOption(option)
-
-    return () => {
-      chart.dispose()
-    }
-  }, [countryStats])
-
-  if (!countryStats || countryStats.length === 0) {
-    return <div className="h-64 flex items-center justify-center text-gray-500">No data available</div>
+  const getRadius = (cases: number) => {
+    return Math.max(4, Math.log10(cases || 1) * 3)
   }
 
-  return <div ref={chartRef} className="h-64 w-full" />
+  const getColor = (cases: number) => {
+    if (cases > 100000) return '#ef4444' // red-500
+    if (cases > 10000) return '#f97316' // orange-500
+    if (cases > 1000) return '#eab308' // yellow-500
+    return '#3b82f6' // blue-500
+  }
+
+  return (
+    <div className="h-[500px] w-full rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm relative z-0">
+      <MapContainer
+        center={[20, 0]}
+        zoom={2}
+        scrollWheelZoom={true}
+        style={{ height: '100%', width: '100%' }}
+        className="z-0"
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          className="map-tiles"
+        />
+        {countryStats.map((country) => {
+          if (country.latitude === undefined || country.longitude === undefined) return null
+          
+          return (
+            <CircleMarker
+              key={country.country_id}
+              center={[country.latitude, country.longitude]}
+              radius={getRadius(country.total_cases)}
+              pathOptions={{
+                color: getColor(country.total_cases),
+                fillColor: getColor(country.total_cases),
+                fillOpacity: 0.6,
+                weight: 1
+              }}
+            >
+              <Popup>
+                <div className="font-semibold text-slate-900">{country.country_name}</div>
+                <div className="text-slate-600">Total Cases: {country.total_cases.toLocaleString()}</div>
+              </Popup>
+            </CircleMarker>
+          )
+        })}
+      </MapContainer>
+      
+      <style jsx global>{`
+        .dark .map-tiles {
+          filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+        }
+        .dark .leaflet-container {
+          background: #0f172a;
+        }
+      `}</style>
+    </div>
+  )
 }

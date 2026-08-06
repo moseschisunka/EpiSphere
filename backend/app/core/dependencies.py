@@ -1,12 +1,14 @@
-﻿"""
-FastAPI dependencies for authorization and permissions
+"""
+FastAPI dependencies for authorization and permissions (RBAC)
 """
 
-from typing import List
-from fastapi import Depends, HTTPException, status
+from typing import List, Optional
+from fastapi import Depends, HTTPException, status, Request
+from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
-from app.db.models import User
+from app.core.database import get_db
+from app.db.models import User, AuditLog, AuditAction
 
 
 def get_current_active_user(
@@ -16,7 +18,7 @@ def get_current_active_user(
     if not current_user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Inactive user",
+            detail="Inactive user account",
         )
     return current_user
 
@@ -33,13 +35,48 @@ def get_current_facility_user(
     return current_user
 
 
+def has_role_access(user: User, allowed_roles: List[str]) -> bool:
+    """
+    Check if a user possesses one of the allowed roles or admin privileges.
+    Admins automatically inherit access to all role-restricted resources.
+    """
+    if not user.is_active:
+        return False
+
+    user_role = user.role.name.lower() if user.role else ""
+    
+    # Admin role or superuser status grants universal access across all endpoints
+    if user_role == "admin" or getattr(user, "is_superuser", False):
+        return True
+
+    allowed_lower = [r.lower() for r in allowed_roles]
+    return user_role in allowed_lower
+
+
 def require_role(allowed_roles: List[str]):
-    """Dependency factory for role-based access control."""
+    """Dependency factory for role-based access control with audit logging."""
 
-    def role_checker(current_user: User = Depends(get_current_active_user)) -> User:
-        user_role = current_user.role.name if current_user.role else None
+    def role_checker(
+        current_user: User = Depends(get_current_active_user),
+        db: Session = Depends(get_db)
+    ) -> User:
+        if not has_role_access(current_user, allowed_roles):
+            # Log access denial for security audit
+            try:
+                audit = AuditLog(
+                    user_id=current_user.id,
+                    action=AuditAction.VIEW,
+                    resource_type="rbac_denial",
+                    details={
+                        "attempted_roles": allowed_roles,
+                        "actual_role": current_user.role.name if current_user.role else "none",
+                    }
+                )
+                db.add(audit)
+                db.commit()
+            except Exception:
+                db.rollback()
 
-        if user_role not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied. Required roles: {', '.join(allowed_roles)}",
@@ -55,13 +92,34 @@ class RoleChecker:
     def __init__(self, allowed_roles: List[str]):
         self.allowed_roles = allowed_roles
 
-    def __call__(self, user: User = Depends(get_current_active_user)) -> User:
+    def __call__(
+        self,
+        user: User = Depends(get_current_active_user),
+        db: Session = Depends(get_db)
+    ) -> User:
         if not user.role:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="User has no role assigned",
             )
-        if user.role.name not in self.allowed_roles:
+
+        if not has_role_access(user, self.allowed_roles):
+            # Log security access refusal
+            try:
+                audit = AuditLog(
+                    user_id=user.id,
+                    action=AuditAction.VIEW,
+                    resource_type="rbac_denial",
+                    details={
+                        "allowed_roles": self.allowed_roles,
+                        "user_role": user.role.name,
+                    }
+                )
+                db.add(audit)
+                db.commit()
+            except Exception:
+                db.rollback()
+
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Role '{user.role.name}' does not have permission to perform this action",
@@ -69,7 +127,11 @@ class RoleChecker:
         return user
 
 
+# Pre-defined RBAC Guards
 allow_admin = RoleChecker(["admin"])
-allow_clinician = RoleChecker(["clinician", "facility_admin", "admin"])
-allow_pharmacist = RoleChecker(["pharmacist", "facility_admin", "admin"])
-allow_facility_admin = RoleChecker(["facility_admin", "admin"])
+allow_epidemiologist = RoleChecker(["admin", "epidemiologist"])
+allow_facility_admin = RoleChecker(["admin", "facility_admin"])
+allow_clinician = RoleChecker(["admin", "clinician", "facility_admin"])
+allow_pharmacist = RoleChecker(["admin", "pharmacist", "facility_admin"])
+allow_data_officer = RoleChecker(["admin", "epidemiologist", "country_data_officer", "facility_admin"])
+
