@@ -15,15 +15,10 @@ const api = axios.create({
   },
 })
 
-// Handle auth errors (redirect to login without manually clearing token since it's httpOnly)
+// Handle auth errors (return rejected promise so callers can handle gracefully)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      if (typeof window !== 'undefined') {
-        window.location.href = '/api/auth/logout' // Call a logout route to clear cookie
-      }
-    }
     return Promise.reject(error)
   }
 )
