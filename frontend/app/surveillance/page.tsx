@@ -1,14 +1,13 @@
 'use client'
 
-import Navbar from '../../components/Navbar'
 import SyndromicDashboard from '../../components/surveillance/SyndromicDashboard'
-import FacilityHeatmap from '../../components/surveillance/FacilityHeatmap'
+import dynamic from 'next/dynamic'
+const FacilityHeatmap = dynamic(() => import('../../components/surveillance/FacilityHeatmap'), { ssr: false })
 import IntegrationStatus from '../../components/surveillance/IntegrationStatus'
 
 export default function SurveillancePage() {
     return (
         <div className="min-h-screen bg-gray-50">
-            <Navbar />
             <main className="container mx-auto px-4 py-8">
                 <h1 className="text-3xl font-bold text-gray-900 mb-6">National Surveillance Operations</h1>
 

@@ -1,7 +1,12 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import * as echarts from 'echarts'
+import * as echarts from 'echarts/core';
+import { LineChart } from 'echarts/charts';
+import { TooltipComponent, GridComponent } from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
+
+echarts.use([LineChart, TooltipComponent, GridComponent, CanvasRenderer]);
 
 interface TimeSeriesChartProps {
   data: Array<{ date: string; value: number }>

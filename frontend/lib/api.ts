@@ -4,7 +4,9 @@
 
 import axios from 'axios'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+// Point to the Next.js frontend origin, so requests go through the Next.js middleware
+// which will inject the secure httpOnly cookie as a Bearer token.
+const API_URL = ''
 
 const api = axios.create({
   baseURL: `${API_URL}/api/v1`,
@@ -13,24 +15,13 @@ const api = axios.create({
   },
 })
 
-// Add auth token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
-
-// Handle auth errors
+// Handle auth errors (redirect to login without manually clearing token since it's httpOnly)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Clear token and redirect to login
-      localStorage.removeItem('access_token')
       if (typeof window !== 'undefined') {
-        window.location.href = '/auth/login'
+        window.location.href = '/api/auth/logout' // Call a logout route to clear cookie
       }
     }
     return Promise.reject(error)
@@ -40,12 +31,8 @@ api.interceptors.response.use(
 // Auth endpoints
 export const authApi = {
   login: async (username: string, password: string) => {
-    const formData = new FormData()
-    formData.append('username', username)
-    formData.append('password', password)
-    const response = await api.post('/auth/login', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    // Call the Next.js API route to get the httpOnly cookie securely
+    const response = await axios.post('/api/auth/login', { username, password })
     return response.data
   },
   register: async (userData: any) => {

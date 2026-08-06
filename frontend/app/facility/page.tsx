@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Navbar from '../../components/Navbar'
 import { facilitiesApi } from '../../lib/api'
 
 // Mock user management for now as backend endpoint for "list facility users" wasn't explicitly created in this turn
@@ -16,7 +15,6 @@ export default function FacilityAdmin() {
 
     return (
         <div className="min-h-screen bg-gray-50">
-            <Navbar />
             <main className="container mx-auto px-4 py-8">
                 <h1 className="text-3xl font-bold text-gray-900 mb-6">Facility Administration</h1>
 

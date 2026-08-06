@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -18,11 +18,11 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const response = await authApi.login(username, password)
-      localStorage.setItem('access_token', response.access_token)
+      await authApi.login(username.trim(), password)
       router.push('/dashboard/global')
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Login failed')
+      const detail = err.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : err.message || 'Login failed')
     } finally {
       setLoading(false)
     }
@@ -53,7 +53,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Username
+              Username or Email
             </label>
             <input
               type="text"

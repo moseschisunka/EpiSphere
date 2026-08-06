@@ -1,7 +1,6 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
-import Navbar from '../../components/Navbar'
 import { clinicalApi, diseasesApi } from '../../lib/api'
 
 export default function ClinicalDesk() {
@@ -84,7 +83,6 @@ export default function ClinicalDesk() {
 
     return (
         <div className="min-h-screen bg-gray-50">
-            <Navbar />
             <main className="container mx-auto px-4 py-8">
                 <div className="flex justify-between items-center mb-6">
                     <h1 className="text-3xl font-bold text-gray-900">Clinical Desk</h1>
@@ -97,7 +95,7 @@ export default function ClinicalDesk() {
                 </div>
 
                 {view === 'list' && (
-                    <div className="bg-white rounded-lg shadow">
+                    <div className="bg-white rounded-lg shadow overflow-x-auto">
                         <table className="min-w-full">
                             <thead>
                                 <tr className="bg-gray-50 border-b">

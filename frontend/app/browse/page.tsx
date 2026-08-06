@@ -1,9 +1,8 @@
-﻿'use client'
+'use client'
 
 /* eslint-disable @next/next/no-img-element */
 
 import React, { useState, useEffect } from 'react'
-import Navbar from '../../components/Navbar'
 import { publicApi } from '../../lib/api'
 import Link from 'next/link'
 
@@ -28,8 +27,6 @@ export default function BrowsePage() {
 
     return (
         <div className="min-h-screen bg-gray-50">
-            <Navbar />
-
             <main className="container mx-auto px-4 py-8">
                 <div className="flex justify-between items-center mb-8">
                     <h1 className="text-3xl font-bold text-gray-900">Health News & Trends</h1>
@@ -87,7 +84,7 @@ export default function BrowsePage() {
                             </div>
                             <div className="flex items-center gap-4 text-sm text-gray-500 mb-6 border-b pb-4">
                                 <span>{selectedArticle.source}</span>
-                                <span>â€¢</span>
+                                <span>&bull;</span>
                                 <span>{new Date(selectedArticle.published_at).toLocaleDateString()}</span>
                             </div>
                             <div className="prose max-w-none text-gray-700">

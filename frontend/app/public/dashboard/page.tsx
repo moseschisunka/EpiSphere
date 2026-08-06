@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { publicApi } from '../../../lib/api'
-import PublicMap from '../../../components/public/PublicMap'
+import dynamic from 'next/dynamic'
+const PublicMap = dynamic(() => import('../../../components/public/PublicMap'), { ssr: false })
 
 export default function PublicDashboard() {
     const [stats, setStats] = useState<any>(null)

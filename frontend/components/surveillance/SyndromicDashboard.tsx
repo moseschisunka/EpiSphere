@@ -1,7 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import ReactECharts from 'echarts-for-react'
+import ReactEChartsCore from 'echarts-for-react/lib/core'
+import * as echarts from 'echarts/core'
+import { LineChart } from 'echarts/charts'
+import { TitleComponent, TooltipComponent, GridComponent, LegendComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+
+echarts.use([LineChart, TitleComponent, TooltipComponent, GridComponent, LegendComponent, CanvasRenderer])
 import { surveillanceApi } from '../../lib/api'
 
 export default function SyndromicDashboard() {
@@ -45,7 +51,7 @@ export default function SyndromicDashboard() {
 
     return (
         <div className="bg-white p-4 rounded-lg shadow-md">
-            <ReactECharts option={option} style={{ height: '400px' }} />
+            <ReactEChartsCore echarts={echarts} option={option} style={{ height: '400px' }} />
             <div className="mt-2 text-sm text-gray-500 bg-yellow-50 p-2 rounded">
                 <strong>Note:</strong> These are syndromic signals based on clinical symptoms, not confirmed diagnoses.
             </div>

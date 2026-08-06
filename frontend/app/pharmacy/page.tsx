@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import Navbar from '../../components/Navbar'
 import { pharmacyApi } from '../../lib/api'
 
 interface Prescription {
@@ -49,7 +48,6 @@ export default function PharmacyDesk() {
 
     return (
         <div className="min-h-screen bg-gray-50">
-            <Navbar />
             <main className="container mx-auto px-4 py-8">
                 <h1 className="text-3xl font-bold text-gray-900 mb-6">Pharmacy Desk</h1>
 
@@ -67,7 +65,8 @@ export default function PharmacyDesk() {
                     {loading ? (
                         <div className="p-8 text-center">Loading...</div>
                     ) : (
-                        <table className="min-w-full">
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full">
                             <thead className="bg-gray-50">
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Drug</th>
@@ -96,6 +95,7 @@ export default function PharmacyDesk() {
                                 ))}
                             </tbody>
                         </table>
+                        </div>
                     )}
                     {!loading && prescriptions.length === 0 && (
                         <div className="p-8 text-center text-gray-500">

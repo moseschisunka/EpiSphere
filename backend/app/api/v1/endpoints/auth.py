@@ -1,11 +1,12 @@
-﻿"""Authentication endpoints"""
+"""Authentication endpoints"""
 
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.limiter import limiter
 from app.core.security import (
     verify_password, create_access_token, get_password_hash
 )
@@ -20,7 +21,9 @@ SELF_REGISTRATION_ROLE = "public"
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def register(
+    request: Request,
     user_data: UserCreate,
     db: Session = Depends(get_db)
 ):
@@ -79,12 +82,17 @@ async def register(
 
 
 @router.post("/login", response_model=Token)
+@limiter.limit("5/minute")
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
     """Login and get access token"""
-    user = db.query(User).filter(User.username == form_data.username).first()
+    login_identifier = form_data.username.strip()
+    user = db.query(User).filter(
+        (User.username == login_identifier) | (User.email == login_identifier)
+    ).first()
 
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(

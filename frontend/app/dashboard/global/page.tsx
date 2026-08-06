@@ -1,8 +1,9 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
 import { dashboardApi, countriesApi, diseasesApi } from '@/lib/api'
-import GlobalMap from '@/components/dashboard/GlobalMap'
+import dynamic from 'next/dynamic'
+const GlobalMap = dynamic(() => import('@/components/dashboard/GlobalMap'), { ssr: false })
 import TimeSeriesChart from '@/components/dashboard/TimeSeriesChart'
 import StatsCards from '@/components/dashboard/StatsCards'
 
