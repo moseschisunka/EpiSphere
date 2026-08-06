@@ -510,7 +510,7 @@ export default function DHSDataLabPage() {
 
                   {inferentialData.summary.cohens_d !== undefined && (
                     <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
-                      <span className="text-xs text-slate-400">Effect Size (Cohen's d)</span>
+                      <span className="text-xs text-slate-400">Effect Size (Cohen&apos;s d)</span>
                       <p className="text-2xl font-bold text-pink-400 mt-1">{inferentialData.summary.cohens_d}</p>
                     </div>
                   )}
