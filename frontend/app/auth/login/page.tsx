@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { authApi } from '@/lib/api'
 import Link from 'next/link'
+import { toast } from 'sonner'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -19,10 +20,13 @@ export default function LoginPage() {
 
     try {
       await authApi.login(username.trim(), password)
+      toast.success('Welcome back! Signed in successfully.')
       router.push('/dashboard/global')
     } catch (err: any) {
       const detail = err.response?.data?.detail
-      setError(typeof detail === 'string' ? detail : err.message || 'Login failed')
+      const errMsg = typeof detail === 'string' ? detail : err.message || 'Login failed'
+      setError(errMsg)
+      toast.error(errMsg)
     } finally {
       setLoading(false)
     }
@@ -33,8 +37,7 @@ export default function LoginPage() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       if (params.get('registered') === 'true') {
-        // Show success message (you could add a toast notification here)
-        console.log('Registration successful! Please login.')
+        toast.success('Registration successful! Please sign in with your account.')
       }
     }
   }, [])

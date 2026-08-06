@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { casesApi, countriesApi, diseasesApi } from '@/lib/api'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 export default function UploadPage() {
   const router = useRouter()
@@ -48,7 +49,7 @@ export default function UploadPage() {
     e.preventDefault()
     
     if (!file || !countryId || !diseaseId) {
-      alert('Please fill in all fields')
+      toast.error('Please select a file, country, and disease')
       return
     }
 
@@ -60,14 +61,19 @@ export default function UploadPage() {
       setResult(response)
       
       if (response.success && response.committed) {
+        toast.success(`Data uploaded successfully! ${response.inserted || 0} cases inserted.`)
         setTimeout(() => {
           router.push('/dashboard/global')
         }, 2000)
+      } else {
+        toast.info('Validation complete. Review status below.')
       }
     } catch (error: any) {
+      const msg = error.response?.data?.detail || 'Upload failed'
+      toast.error(msg)
       setResult({
         success: false,
-        message: error.response?.data?.detail || 'Upload failed',
+        message: msg,
       })
     } finally {
       setUploading(false)

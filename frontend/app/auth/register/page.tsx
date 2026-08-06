@@ -1,9 +1,10 @@
-﻿'use client'
+'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { authApi, countriesApi } from '@/lib/api'
 import Link from 'next/link'
+import { toast } from 'sonner'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -50,17 +51,23 @@ export default function RegisterPage() {
 
     // Validation
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match')
+      const msg = 'Passwords do not match'
+      setError(msg)
+      toast.error(msg)
       return
     }
 
     if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters')
+      const msg = 'Password must be at least 6 characters'
+      setError(msg)
+      toast.error(msg)
       return
     }
 
     if (!formData.email || !formData.username) {
-      setError('Email and username are required')
+      const msg = 'Email and username are required'
+      setError(msg)
+      toast.error(msg)
       return
     }
 
@@ -68,12 +75,13 @@ export default function RegisterPage() {
 
     try {
       const { confirmPassword, ...registerData } = formData
-      const response = await authApi.register(registerData)
-      
-      // Registration successful, redirect to login
+      await authApi.register(registerData)
+      toast.success('Account created successfully!')
       router.push('/auth/login?registered=true')
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Registration failed. Please try again.')
+      const errMsg = err.response?.data?.detail || 'Registration failed. Please try again.'
+      setError(errMsg)
+      toast.error(errMsg)
     } finally {
       setLoading(false)
     }

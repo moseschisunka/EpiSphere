@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { pharmacyApi } from '../../lib/api'
+import { toast } from 'sonner'
 
 interface Prescription {
     id: number;
@@ -39,10 +40,11 @@ export default function PharmacyDesk() {
             await pharmacyApi.dispense({ prescription_id: id, notes: 'Dispensed via Pharmacy Desk' })
             // Optimistic update
             setPrescriptions(prev => prev.filter(p => p.id !== id))
+            toast.success("Medication dispensed successfully")
         } catch (e) {
             console.error("Failed to dispense", e)
-            // Ideally use a toast notification here
             setError("Failed to dispense medication")
+            toast.error("Failed to dispense medication")
         }
     }
 

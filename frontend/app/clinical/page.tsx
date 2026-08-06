@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { clinicalApi, diseasesApi } from '../../lib/api'
+import { toast } from 'sonner'
 
 export default function ClinicalDesk() {
     const [patients, setPatients] = useState<any[]>([])
@@ -29,6 +30,7 @@ export default function ClinicalDesk() {
             setDiseases(ds)
         } catch (e) {
             console.error("Failed to load clinical data", e)
+            toast.error("Failed to load clinical data")
         }
     }
 
@@ -44,10 +46,11 @@ export default function ClinicalDesk() {
 
         try {
             await clinicalApi.createPatient(data)
+            toast.success("Patient registered successfully")
             await loadData()
             setView('list')
         } catch (e) {
-            alert("Failed to create patient")
+            toast.error("Failed to create patient")
         }
     }
 
@@ -70,14 +73,14 @@ export default function ClinicalDesk() {
 
         try {
             await clinicalApi.createEncounter(encounterData)
-            alert("Encounter recorded")
+            toast.success("Clinical visit recorded successfully")
             setView('list')
             // Reset form
             setSymptoms('')
             setDiagnosisDiseaseId('')
             setRxDrug('')
         } catch (e) {
-            alert("Failed to record encounter")
+            toast.error("Failed to record clinical encounter")
         }
     }
 

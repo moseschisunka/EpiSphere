@@ -43,6 +43,10 @@ export const authApi = {
     const response = await api.get('/auth/me')
     return response.data
   },
+  logout: async () => {
+    const response = await axios.post('/api/auth/logout')
+    return response.data
+  },
 }
 
 // Cases endpoints
