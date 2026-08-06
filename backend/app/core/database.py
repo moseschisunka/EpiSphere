@@ -16,7 +16,10 @@ if settings.DATABASE_URL.startswith("postgresql://"):
     engine = create_async_engine(
         async_database_url,
         echo=settings.DEBUG,
-        future=True
+        future=True,
+        pool_size=20,
+        max_overflow=10,
+        pool_timeout=30,
     )
 else:
     # SQLite doesn't support async well, use sync engine
@@ -27,13 +30,21 @@ else:
 connect_args = {}
 if settings.DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
-
-sync_engine = create_engine(
-    settings.DATABASE_URL,
-    echo=settings.DEBUG,
-    pool_pre_ping=True if not settings.DATABASE_URL.startswith("sqlite") else False,
-    connect_args=connect_args
-)
+    sync_engine = create_engine(
+        settings.DATABASE_URL,
+        echo=settings.DEBUG,
+        connect_args=connect_args
+    )
+else:
+    sync_engine = create_engine(
+        settings.DATABASE_URL,
+        echo=settings.DEBUG,
+        pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=5,
+        pool_timeout=30,
+        connect_args=connect_args
+    )
 
 # Async session factory (only for PostgreSQL)
 if engine is not None:

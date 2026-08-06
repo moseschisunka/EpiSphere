@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     auth, cases, alerts, forecast, reports, dashboard, users, countries, diseases,
     facilities, clinical, pharmacy, surveillance, interop, public, covid_ingest,
-    news, locations
+    news, locations, dhs_analytics
 )
 
 api_router = APIRouter()
@@ -28,3 +28,4 @@ api_router.include_router(public.router, prefix="/public", tags=["public"])
 api_router.include_router(covid_ingest.router, prefix="/covid19", tags=["data-ingestion"])
 api_router.include_router(news.router, prefix="/news", tags=["news"])
 api_router.include_router(locations.router, prefix="/locations", tags=["locations"])
+api_router.include_router(dhs_analytics.router, prefix="/dhs", tags=["dhs-analytics"])

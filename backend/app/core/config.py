@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # CORS / hosts
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001"]
-    ALLOWED_HOSTS: List[str] = ["episphere.ai", "*.episphere.ai"]
+    CORS_ORIGINS: str | List[str] = ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001"]
+    ALLOWED_HOSTS: str | List[str] = ["episphere.ai", "*.episphere.ai"]
 
     # File uploads
     UPLOAD_DIR: Path = Path("uploads")
@@ -62,7 +62,17 @@ class Settings(BaseSettings):
             raise ValueError("SECRET_KEY must be configured in production")
         return value
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
+    @field_validator("CORS_ORIGINS", "ALLOWED_HOSTS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: str | List[str]) -> List[str]:
+        if isinstance(v, str) and not v.startswith("["):
+            return [i.strip() for i in v.split(",") if i.strip()]
+        elif isinstance(v, str):
+            import json
+            return json.loads(v)
+        return v
+
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
 
 
 settings = Settings()

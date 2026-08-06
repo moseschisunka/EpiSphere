@@ -4,5 +4,5 @@ set -e
 echo "Running Alembic migrations..."
 alembic upgrade head
 
-echo "Starting Uvicorn server..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+echo "Starting Gunicorn server..."
+exec gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000

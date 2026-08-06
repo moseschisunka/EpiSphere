@@ -70,7 +70,7 @@ class ForecastingPipeline:
         return forecast_result
 
     def _candidate_models(self) -> List[str]:
-        models = ["seasonal_naive", "simple_trend"]
+        models = ["seasonal_naive", "simple_trend", "exp_smoothing"]
         if ARIMA_AVAILABLE:
             models.append("arima")
         if PROPHET_AVAILABLE:
@@ -174,6 +174,8 @@ class ForecastingPipeline:
             return await self._arima_forecast(series, future_dates, horizon_days)
         if model_type == "seasonal_naive":
             return await self._seasonal_naive_forecast(series, future_dates, horizon_days)
+        if model_type == "exp_smoothing":
+            return await self._exp_smoothing_forecast(series, future_dates, horizon_days)
         if model_type == "lstm":
             result = await self._simple_forecast(series, future_dates, horizon_days)
             result["model_type"] = "simple_trend"
@@ -233,6 +235,23 @@ class ForecastingPipeline:
                 "values": [max(0.0, float(v)) for v in values],
                 "lower_bound": [max(0.0, float(v - 1.96 * std)) for v in values],
                 "upper_bound": [max(0.0, float(v + 1.96 * std)) for v in values],
+            },
+        }
+
+    async def _exp_smoothing_forecast(self, series: pd.Series, future_dates: List[date], horizon_days: int) -> Dict[str, Any]:
+        ewm_series = series.ewm(span=7, adjust=False).mean()
+        last_ewm = float(ewm_series.iloc[-1])
+        diffs = ewm_series.diff().dropna().tail(14)
+        trend = float(diffs.mean()) if len(diffs) else 0.0
+        values = [max(0.0, last_ewm + trend * (i + 1)) for i in range(horizon_days)]
+        std = max(float(series.tail(30).std()), 1.0)
+        return {
+            "model_type": "exp_smoothing",
+            "forecast_data": {
+                "dates": [d.isoformat() for d in future_dates],
+                "values": [float(v) for v in values],
+                "lower_bound": [max(0.0, float(v - 1.96 * std)) for v in values],
+                "upper_bound": [float(v + 1.96 * std) for v in values],
             },
         }
 

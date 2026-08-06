@@ -14,7 +14,10 @@ from slowapi import _rate_limit_exceeded_handler
 
 from app.core.config import settings
 from app.core.limiter import limiter
+from app.core.logger import setup_logging
 from app.api.v1.api import api_router
+
+logger = setup_logging()
 
 
 @asynccontextmanager
@@ -24,7 +27,9 @@ async def lifespan(app: FastAPI):
     Schema changes are managed by Alembic migrations. Do not mutate production
     schema at application startup.
     """
+    logger.info(f"Starting EpiSphere AI in {settings.ENVIRONMENT} mode")
     yield
+    logger.info("Shutting down EpiSphere AI")
 
 
 app = FastAPI(

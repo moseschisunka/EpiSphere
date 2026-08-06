@@ -29,6 +29,7 @@ async def list_diseases(
             "name": d.name,
             "code": d.code,
             "description": d.description,
+            "biosafety_level": d.biosafety_level.value if hasattr(d.biosafety_level, "value") else d.biosafety_level,
             "is_active": d.is_active
         }
         for d in diseases
@@ -54,5 +55,6 @@ async def get_disease(
         "name": disease.name,
         "code": disease.code,
         "description": disease.description,
+        "biosafety_level": disease.biosafety_level.value if hasattr(disease.biosafety_level, "value") else disease.biosafety_level,
         "is_active": disease.is_active
     }

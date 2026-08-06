@@ -90,6 +90,14 @@ class QualitySeverity(str, enum.Enum):
     ERROR = "error"
 
 
+class BiosafetyLevel(str, enum.Enum):
+    BSL1 = "BSL-1"
+    BSL2 = "BSL-2"
+    BSL3 = "BSL-3"
+    BSL4 = "BSL-4"
+
+
+
 # Models
 class Role(Base):
     """User roles for RBAC"""
@@ -193,6 +201,7 @@ class Disease(Base):
     name = Column(String(255), unique=True, nullable=False, index=True)
     code = Column(String(50), unique=True, nullable=True)  # ICD-10 or custom code
     description = Column(Text)
+    biosafety_level = Column(SQLEnum(BiosafetyLevel), nullable=True, default=BiosafetyLevel.BSL2)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     

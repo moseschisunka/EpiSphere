@@ -48,6 +48,7 @@ const navGroups: NavGroup[] = [
     label: 'Data',
     icon: BarChart3,
     items: [
+      { href: '/datalab', label: 'DHS Data Lab', icon: BarChart3 },
       { href: '/browse', label: 'Browse', icon: Search },
       { href: '/upload', label: 'Upload Data', icon: Upload },
       { href: '/admin', label: 'Admin Portal', icon: Shield, roles: ['admin'] },
