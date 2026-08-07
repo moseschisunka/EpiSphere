@@ -6,7 +6,7 @@ from datetime import datetime, date
 from app.api.v1.deps import allow_admin
 from app.core.database import get_db
 from app.db.models import User, InteropLog, Case, Disease, Country, InteropDirection, InteropStatus
-from app.schemas.interop import DHIS2SyncRequest, DHIS2SyncResponse
+from app.schemas.interop import DHIS2SyncRequest, DHIS2SyncResponse, DHIS2PullRequest, DHIS2PullResponse
 from app.schemas.interop_extract import DataExtractResponse, AggregateCaseMetric, WebhookPayload
 from app.services.interop_service import InteropService
 
@@ -27,6 +27,28 @@ def trigger_dhis2_sync(
         dataset=sync_request.dataset,
         mapping_id=sync_request.mapping_id,
         dry_run=sync_request.dry_run,
+    )
+    if not result["success"]:
+        raise HTTPException(status_code=400 if result["dry_run"] else 502, detail=result)
+    return result
+
+
+@router.post("/dhis2/pull", response_model=DHIS2PullResponse)
+def trigger_dhis2_pull(
+    pull_request: DHIS2PullRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(allow_admin)
+):
+    """Fetch data from DHIS2 and store it as Cases in EpiSphere."""
+    result = InteropService.pull_from_dhis2(
+        db=db,
+        user=current_user,
+        dataset_id=pull_request.dataset_id,
+        org_unit=pull_request.org_unit,
+        period=pull_request.period,
+        mapping=pull_request.mapping,
+        country_id=pull_request.country_id,
+        dry_run=pull_request.dry_run,
     )
     if not result["success"]:
         raise HTTPException(status_code=400 if result["dry_run"] else 502, detail=result)

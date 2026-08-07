@@ -40,13 +40,15 @@ def get_news_article(article_id: int, db: Session = Depends(get_db)):
     return article
 
 
+from app.core.dependencies import get_agent_or_admin
+
 @router.post("", response_model=news_schema.NewsArticle)
 def create_news_article(
     article_in: news_schema.NewsArticleCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(allow_admin)
+    agent_or_admin = Depends(get_agent_or_admin)
 ):
-    """Create a new health news article (Admin only)."""
+    """Create a new health news article (Admin or Agent only)."""
     article = NewsArticle(
         title=article_in.title,
         summary=article_in.summary,
