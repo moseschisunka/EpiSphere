@@ -1,10 +1,14 @@
 import asyncio
+from datetime import date, datetime
+from types import SimpleNamespace
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.api.v1.endpoints.reports import list_reports
+from app.api.v1.endpoints import reports as reports_endpoint
+from app.api.v1.endpoints.reports import generate_report, list_reports
 from app.db.models import Base, Report, ReportType, Role, User
+from app.schemas.report import ReportRequest
 
 
 def test_list_reports_preserves_report_metadata():
@@ -40,3 +44,41 @@ def test_list_reports_preserves_report_metadata():
     assert response[0].report_metadata == {"row_count": 12, "quality_score": 0.95}
 
     session.close()
+
+
+def test_generate_report_serializes_report_metadata(monkeypatch):
+    report = SimpleNamespace(
+        id=7,
+        title="Weekly bulletin",
+        report_type=ReportType.WEEKLY_BULLETIN,
+        country_id=None,
+        disease_id=None,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 7),
+        file_path="reports/weekly.pdf",
+        file_format="pdf",
+        generated_by=3,
+        generated_at=datetime(2026, 1, 8),
+        report_metadata={"row_count": 12},
+    )
+
+    class FakeReportService:
+        def __init__(self, db):
+            self.db = db
+
+        async def generate_report(self, **kwargs):
+            return report
+
+    monkeypatch.setattr(reports_endpoint, "ReportService", FakeReportService)
+    response = asyncio.run(generate_report(
+        ReportRequest(
+            report_type=ReportType.WEEKLY_BULLETIN,
+            title="Weekly bulletin",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 1, 7),
+        ),
+        current_user=SimpleNamespace(id=3),
+        db=object(),
+    ))
+
+    assert response.report_metadata == {"row_count": 12}

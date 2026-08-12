@@ -46,7 +46,7 @@ async def generate_report(
             file_format=report.file_format,
             generated_by=report.generated_by,
             generated_at=report.generated_at,
-            metadata=report.report_metadata
+            report_metadata=report.report_metadata
         )
     
     except Exception as e:
