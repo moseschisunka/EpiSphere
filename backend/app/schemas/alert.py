@@ -38,6 +38,8 @@ class AlertResponse(AlertBase):
     reviewed_by: Optional[int] = None
     reviewed_at: Optional[datetime] = None
     review_notes: Optional[str] = None
+    investigation_notes: Optional[str] = None
+    evidence_references: Optional[list[str]] = None
     resolution_notes: Optional[str] = None
     country_name: Optional[str] = None
     disease_name: Optional[str] = None
@@ -48,6 +50,8 @@ class AlertResponse(AlertBase):
 class AlertUpdate(BaseModel):
     status: Optional[AlertStatus] = None
     assigned_to: Optional[int] = Field(default=None, gt=0)
+    investigation_notes: Optional[str] = Field(default=None, max_length=2000)
+    evidence_references: Optional[list[str]] = Field(default=None, max_length=20)
     resolution_notes: Optional[str] = Field(default=None, max_length=2000)
 
 

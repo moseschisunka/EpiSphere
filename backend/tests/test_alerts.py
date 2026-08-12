@@ -65,7 +65,11 @@ def test_alert_lifecycle_records_investigation_and_audit():
 
     response = asyncio.run(resolve_alert(
         alert.id,
-        AlertUpdate(status=AlertStatus.INVESTIGATING, resolution_notes="County team notified."),
+        AlertUpdate(
+            status=AlertStatus.INVESTIGATING,
+            investigation_notes="County team notified.",
+            evidence_references=["district-call-2026-08-12"],
+        ),
         user,
         db,
     ))
@@ -78,7 +82,9 @@ def test_alert_lifecycle_records_investigation_and_audit():
         "previous_status": "triggered",
         "status": "investigating",
         "assigned_to": None,
-        "resolution_notes_updated": True,
+        "investigation_notes_updated": True,
+        "evidence_references_updated": True,
+        "resolution_notes_updated": False,
     }
     db.close()
 

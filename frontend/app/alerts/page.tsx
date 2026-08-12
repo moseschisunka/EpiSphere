@@ -41,6 +41,9 @@ export default function AlertsPage() {
   }
 
   const updateAlert = async (alertId: number, nextStatus: AlertStatus) => {
+    const investigationNotes = nextStatus === 'investigating'
+      ? window.prompt('Add investigation notes (optional):') || undefined
+      : undefined
     const resolutionNotes = nextStatus === 'resolved' || nextStatus === 'false_positive'
       ? window.prompt('Add resolution notes (optional):') || undefined
       : undefined
@@ -49,6 +52,7 @@ export default function AlertsPage() {
     try {
       const updated = await alertsApi.resolve(alertId, {
         status: nextStatus,
+        investigation_notes: investigationNotes,
         resolution_notes: resolutionNotes,
       })
       setAlerts((current) => current.map((alert) => alert.id === alertId ? updated : alert))

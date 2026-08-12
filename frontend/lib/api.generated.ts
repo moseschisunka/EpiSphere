@@ -1754,6 +1754,10 @@ export interface components {
             reviewed_at?: string | null;
             /** Review Notes */
             review_notes?: string | null;
+            /** Investigation Notes */
+            investigation_notes?: string | null;
+            /** Evidence References */
+            evidence_references?: string[] | null;
             /** Resolution Notes */
             resolution_notes?: string | null;
             /** Country Name */
@@ -1784,6 +1788,10 @@ export interface components {
             status?: components["schemas"]["AlertStatus"] | null;
             /** Assigned To */
             assigned_to?: number | null;
+            /** Investigation Notes */
+            investigation_notes?: string | null;
+            /** Evidence References */
+            evidence_references?: string[] | null;
             /** Resolution Notes */
             resolution_notes?: string | null;
         };

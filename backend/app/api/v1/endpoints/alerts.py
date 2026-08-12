@@ -229,6 +229,10 @@ async def resolve_alert(
     
     if alert_update.resolution_notes:
         alert.resolution_notes = alert_update.resolution_notes
+    if alert_update.investigation_notes:
+        alert.investigation_notes = alert_update.investigation_notes
+    if alert_update.evidence_references is not None:
+        alert.evidence_references = alert_update.evidence_references
     
     db.commit()
     db.refresh(alert)
@@ -243,6 +247,8 @@ async def resolve_alert(
             "previous_status": previous_status.value if previous_status else None,
             "status": alert.status.value if alert.status else None,
             "assigned_to": alert.assigned_to,
+            "investigation_notes_updated": alert_update.investigation_notes is not None,
+            "evidence_references_updated": alert_update.evidence_references is not None,
             "resolution_notes_updated": alert_update.resolution_notes is not None,
         }
     )

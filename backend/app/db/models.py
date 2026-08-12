@@ -355,6 +355,8 @@ class Alert(Base):
     reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
     review_notes = Column(Text, nullable=True)
+    investigation_notes = Column(Text, nullable=True)
+    evidence_references = Column(JSON, nullable=True)
     resolution_notes = Column(Text, nullable=True)
     
     country = relationship("Country", back_populates="alerts")
