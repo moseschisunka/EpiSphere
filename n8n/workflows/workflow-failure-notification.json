@@ -1,0 +1,67 @@
+{
+  "name": "EpiSphere - Workflow Failure Notification",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
+  },
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "episphere-workflow-error-trigger",
+      "name": "Workflow error trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        360,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:8000/api/v1/interop/webhook",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "__SET_FROM_ENCRYPTED_N8N_INTEROP_CREDENTIAL__"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"event_type\": \"n8n_workflow_failure\", \"source_system\": \"n8n\", \"data\": {\"workflow_id\": $json.workflow.id, \"execution_id\": $json.execution.id, \"retryable\": true}}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "record-workflow-failure",
+      "name": "Record failure in EpiSphere",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "position": [
+        620,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Workflow error trigger": {
+      "main": [
+        [
+          {
+            "node": "Record failure in EpiSphere",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
