@@ -100,6 +100,16 @@ class ImportStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class IngestionJobStatus(str, enum.Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCEL_REQUESTED = "cancel_requested"
+    CANCELLED = "cancelled"
+    DEAD_LETTER = "dead_letter"
+
+
 class QualitySeverity(str, enum.Enum):
     INFO = "info"
     WARNING = "warning"
@@ -514,10 +524,43 @@ class ImportBatch(Base):
     row_errors = relationship("ImportRowError", back_populates="batch", cascade="all, delete-orphan")
     quality_checks = relationship("DataQualityCheck", back_populates="batch", cascade="all, delete-orphan")
     cases = relationship("Case", back_populates="import_batch")
+    jobs = relationship("IngestionJob", back_populates="import_batch")
 
     __table_args__ = (
         Index("idx_import_batch_status_uploaded", "status", "uploaded_at"),
         Index("idx_import_batch_scope", "country_id", "disease_id", "dataset_type"),
+    )
+
+
+class IngestionJob(Base):
+    """Durable worker job envelope for long-running ingestion operations."""
+
+    __tablename__ = "ingestion_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_type = Column(String(100), nullable=False, index=True)
+    status = Column(SQLEnum(IngestionJobStatus), nullable=False, default=IngestionJobStatus.QUEUED, index=True)
+    payload = Column(JSON, nullable=False, default=dict)
+    result = Column(JSON, nullable=True)
+    error = Column(Text, nullable=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=3)
+    available_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    cancel_requested_at = Column(DateTime, nullable=True)
+    worker_id = Column(String(255), nullable=True)
+    import_batch_id = Column(Integer, ForeignKey("import_batches.id"), nullable=True, index=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    import_batch = relationship("ImportBatch", back_populates="jobs")
+    creator = relationship("User")
+
+    __table_args__ = (
+        Index("idx_ingestion_job_queue", "status", "available_at"),
+        Index("idx_ingestion_job_type_created", "job_type", "created_at"),
     )
 
 

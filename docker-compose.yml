@@ -78,6 +78,18 @@ services:
       redis:
         condition: service_healthy
 
+  # Durable ingestion worker. External schedulers enqueue jobs through the API;
+  # this process owns retries and dead-letter transitions.
+  ingestion-worker:
+    extends:
+      service: backend
+    container_name: episphere_ingestion_worker
+    entrypoint: ["python", "-m", "scripts.run_ingestion_worker"]
+    command: ["--poll-seconds", "10"]
+    ports: []
+    healthcheck:
+      disable: true
+
   # Next.js Frontend
   frontend:
     build:

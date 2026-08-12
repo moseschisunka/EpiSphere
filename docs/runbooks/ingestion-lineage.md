@@ -30,9 +30,22 @@ Every surveillance `Case` written by an approved ingestion path must carry:
 5. Operators must reconcile `rows_total`, `rows_valid`, and `rows_committed`
    before treating a batch as complete.
 
-## Remaining Phase 3 work
+## Durable worker operation
 
-The current service calls are synchronous or FastAPI background tasks. Before
-pilot scale, move long imports behind a durable worker queue with explicit
-retry, cancellation, dead-letter, and replay endpoints. A failed batch must
-remain inspectable and must never leave a partial production update.
+The OWID COVID ingestion path is queued in `ingestion_jobs` and processed by
+the explicit worker handler:
+
+```powershell
+python -m scripts.run_ingestion_worker --once
+python -m scripts.run_ingestion_worker --poll-seconds 10
+```
+
+Operators can inspect, cancel, and replay jobs through `/api/v1/ingestion/jobs`.
+Retries use bounded exponential backoff and exhausted jobs enter
+`dead_letter`; replay resets the attempt counter without changing the original
+payload. Unknown job types are dead-lettered rather than dynamically executed.
+
+Remaining Phase 3 work is to move the long CSV/WHO/DHIS2/manual-upload paths
+behind the same worker contract, with durable source payload/object storage and
+transactional batch commit so a failed job cannot leave a partial production
+update.
