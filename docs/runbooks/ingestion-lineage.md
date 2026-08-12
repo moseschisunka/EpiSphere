@@ -46,7 +46,11 @@ python -m scripts.run_ingestion_worker --poll-seconds 10
 Operators can inspect, cancel, and replay jobs through `/api/v1/ingestion/jobs`.
 Retries use bounded exponential backoff and exhausted jobs enter
 `dead_letter`; replay resets the attempt counter without changing the original
-payload. Unknown job types are dead-lettered rather than dynamically executed.
+payload. Cancellation is cooperative: queued jobs are cancelled before claim;
+an in-flight job records `cancel_requested` and is finalized as `cancelled` when
+its handler returns. The handler's external side effects are not rolled back,
+so operators must reconcile the import batch before replaying it. Unknown job
+types are dead-lettered rather than dynamically executed.
 
 Remaining Phase 3 work is to move manual file uploads behind the same worker
 contract and add durable source payload/object storage plus transactional batch

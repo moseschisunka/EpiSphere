@@ -61,6 +61,23 @@ def test_successful_job_records_result():
     db.close()
 
 
+def test_cancel_requested_during_execution_finalizes_as_cancelled():
+    db = make_session()
+    job = enqueue_job(db, job_type="test", payload={})
+    claimed = claim_next_job(db, worker_id="worker-a")
+
+    request_cancel(db, claimed)
+    finalized = complete_job(db, claimed, {"rows": 4})
+
+    assert finalized.status is IngestionJobStatus.CANCELLED
+    assert finalized.result == {
+        "cancelled": True,
+        "completed_after_cancel_request": True,
+        "handler_result": {"rows": 4},
+    }
+    db.close()
+
+
 def test_replay_rejects_queued_job():
     db = make_session()
     job = enqueue_job(db, job_type="test", payload={})

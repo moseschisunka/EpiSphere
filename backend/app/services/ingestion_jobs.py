@@ -73,6 +73,23 @@ def claim_next_job(db: Session, *, worker_id: str | None = None) -> IngestionJob
 
 
 def complete_job(db: Session, job: IngestionJob, result: dict | None = None) -> IngestionJob:
+    # A cancellation request can arrive while the handler is running. Refresh
+    # the row before finalizing so a completed handler is never reported as a
+    # successful job after an operator requested cancellation.
+    db.refresh(job)
+    if job.status == IngestionJobStatus.CANCEL_REQUESTED:
+        job.status = IngestionJobStatus.CANCELLED
+        job.result = {
+            "cancelled": True,
+            "completed_after_cancel_request": True,
+            "handler_result": result or {},
+        }
+        job.error = None
+        job.completed_at = datetime.utcnow()
+        job.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(job)
+        return job
     job.status = IngestionJobStatus.SUCCEEDED
     job.result = result or {}
     job.error = None
