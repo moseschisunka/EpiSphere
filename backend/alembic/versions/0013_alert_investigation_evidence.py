@@ -1,6 +1,6 @@
 """record operational investigation notes and evidence
 
-Revision ID: 0013_alert_investigation_evidence
+Revision ID: 0013_alert_evidence
 Revises: 0012_staged_import_cases
 Create Date: 2026-08-12
 """
@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0013_alert_investigation_evidence"
+revision = "0013_alert_evidence"
 down_revision = "0012_staged_import_cases"
 branch_labels = None
 depends_on = None
