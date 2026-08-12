@@ -25,10 +25,13 @@ in a workflow export or this repository. Importable templates live in
    - Method: `POST`
    - URL: `http://backend:8000/api/v1/datasets/ingest-csv`
    - Header: `X-API-Key` from the n8n credential
-   - Body: `url`, `disease_id`, `mapping`, and `dry_run: false`
+   - Body: `url`, `disease_id`, `mapping`, `dry_run: false`, and `enqueue: true`
 4. For WHO GHO data, use `/api/v1/datasets/ingest-who` with `indicator_code`
    instead of `url`.
+5. Store the returned `job_id` and poll `GET /api/v1/ingestion/jobs/{job_id}`
+   before reporting the import as complete.
 
-Start with `dry_run: true` and confirm the returned record count before enabling
+Start with `dry_run: true` and confirm the returned job result before enabling
 production writes. The backend remains authoritative for authentication,
-validation, and database writes.
+validation, lineage, retries, and database writes; n8n only schedules and
+observes the job.

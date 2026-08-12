@@ -33,7 +33,9 @@ Every surveillance `Case` written by an approved ingestion path must carry:
 ## Durable worker operation
 
 The OWID COVID ingestion path is queued in `ingestion_jobs` and processed by
-the explicit worker handler:
+the explicit worker handler. Public CSV, WHO GHO, and DHIS2 sync/pull requests
+can also opt into the same queue by setting `enqueue: true`; the API returns a
+job identifier with HTTP 202 and operators track it through the job endpoints.
 
 ```powershell
 python -m scripts.run_ingestion_worker --once
@@ -45,7 +47,7 @@ Retries use bounded exponential backoff and exhausted jobs enter
 `dead_letter`; replay resets the attempt counter without changing the original
 payload. Unknown job types are dead-lettered rather than dynamically executed.
 
-Remaining Phase 3 work is to move the long CSV/WHO/DHIS2/manual-upload paths
-behind the same worker contract, with durable source payload/object storage and
-transactional batch commit so a failed job cannot leave a partial production
-update.
+Remaining Phase 3 work is to make queued execution the default for production
+integrations, move manual file uploads behind the same worker contract, and add
+durable source payload/object storage plus transactional batch commit so a
+failed job cannot leave a partial production update.

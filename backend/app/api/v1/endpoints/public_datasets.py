@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.dependencies import get_current_active_user, get_dataset_agent_or_admin
 from app.db.models import AuditAction, AuditLog, User
 from app.schemas.public_datasets import CsvIngestRequest, WhoGhoIngestRequest, IngestResponse
 from app.services.public_dataset_service import PublicDatasetService
+from app.services.ingestion_jobs import enqueue_job
 from app.core.limiter import limiter
 
 router = APIRouter()
@@ -13,6 +14,7 @@ router = APIRouter()
 @limiter.limit("10/minute")
 async def ingest_csv_dataset(
     request: Request,
+    response: Response,
     payload: CsvIngestRequest,
     db: Session = Depends(get_db),
     agent_or_admin = Depends(get_dataset_agent_or_admin)
@@ -22,6 +24,40 @@ async def ingest_csv_dataset(
     Requires admin privileges or Agent API Key.
     """
     try:
+        if payload.enqueue:
+            job = enqueue_job(
+                db,
+                job_type="public_csv",
+                payload={
+                    "url": payload.url,
+                    "mapping": payload.mapping,
+                    "disease_id": payload.disease_id,
+                    "dry_run": payload.dry_run,
+                },
+                created_by=agent_or_admin.id if isinstance(agent_or_admin, User) else None,
+            )
+            db.add(AuditLog(
+                user_id=agent_or_admin.id if isinstance(agent_or_admin, User) else None,
+                action=AuditAction.UPLOAD,
+                resource_type="ingestion_job",
+                resource_id=job.id,
+                details={
+                    "actor": agent_or_admin.name if hasattr(agent_or_admin, "name") else "agent",
+                    "auth_method": agent_or_admin.auth_method if hasattr(agent_or_admin, "auth_method") else "bearer",
+                    "request_id": getattr(request.state, "request_id", None),
+                    "dataset_type": "csv",
+                    "queued": True,
+                    "dry_run": payload.dry_run,
+                },
+            ))
+            db.commit()
+            response.status_code = status.HTTP_202_ACCEPTED
+            return IngestResponse(
+                success=True,
+                records_imported=0,
+                warnings=["Import queued for durable worker execution."],
+                job_id=job.id,
+            )
         result = PublicDatasetService.ingest_csv_url(
             db=db,
             url=payload.url,
@@ -55,6 +91,7 @@ async def ingest_csv_dataset(
 @limiter.limit("10/minute")
 async def ingest_who_gho_dataset(
     request: Request,
+    response: Response,
     payload: WhoGhoIngestRequest,
     db: Session = Depends(get_db),
     agent_or_admin = Depends(get_dataset_agent_or_admin)
@@ -64,6 +101,39 @@ async def ingest_who_gho_dataset(
     Requires admin privileges or Agent API Key.
     """
     try:
+        if payload.enqueue:
+            job = enqueue_job(
+                db,
+                job_type="public_who_gho",
+                payload={
+                    "indicator_code": payload.indicator_code,
+                    "disease_id": payload.disease_id,
+                    "dry_run": payload.dry_run,
+                },
+                created_by=agent_or_admin.id if isinstance(agent_or_admin, User) else None,
+            )
+            db.add(AuditLog(
+                user_id=agent_or_admin.id if isinstance(agent_or_admin, User) else None,
+                action=AuditAction.UPLOAD,
+                resource_type="ingestion_job",
+                resource_id=job.id,
+                details={
+                    "actor": agent_or_admin.name if hasattr(agent_or_admin, "name") else "agent",
+                    "auth_method": agent_or_admin.auth_method if hasattr(agent_or_admin, "auth_method") else "bearer",
+                    "request_id": getattr(request.state, "request_id", None),
+                    "dataset_type": "who_gho",
+                    "queued": True,
+                    "dry_run": payload.dry_run,
+                },
+            ))
+            db.commit()
+            response.status_code = status.HTTP_202_ACCEPTED
+            return IngestResponse(
+                success=True,
+                records_imported=0,
+                warnings=["Import queued for durable worker execution."],
+                job_id=job.id,
+            )
         result = PublicDatasetService.ingest_who_gho(
             db=db,
             indicator_code=payload.indicator_code,

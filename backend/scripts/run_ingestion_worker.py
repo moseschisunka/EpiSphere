@@ -11,9 +11,11 @@ import socket
 import time
 
 from app.core.database import SessionLocal
-from app.db.models import IngestionJobStatus
+from app.db.models import IngestionJobStatus, User
 from app.services.covid_data_service import CovidDataService
 from app.services.ingestion_jobs import claim_next_job, complete_job, fail_job, request_cancel
+from app.services.interop_service import InteropService
+from app.services.public_dataset_service import PublicDatasetService
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,23 @@ async def execute_job(job) -> dict:
                 user_id=job.payload.get("user_id")
             )
             return result
+        finally:
+            db.close()
+    if job.job_type in {"public_csv", "public_who_gho", "dhis2_sync", "dhis2_pull"}:
+        db = SessionLocal()
+        try:
+            if job.job_type == "public_csv":
+                return PublicDatasetService.ingest_csv_url(db=db, **job.payload)
+            if job.job_type == "public_who_gho":
+                return PublicDatasetService.ingest_who_gho(db=db, **job.payload)
+            user = db.query(User).filter(User.id == job.payload.get("user_id")).first()
+            if not user:
+                raise ValueError("The durable job creator no longer exists")
+            payload = dict(job.payload)
+            payload.pop("user_id", None)
+            if job.job_type == "dhis2_sync":
+                return InteropService.sync_to_dhis2(db=db, user=user, **payload)
+            return InteropService.pull_from_dhis2(db=db, user=user, **payload)
         finally:
             db.close()
     raise ValueError(f"Unsupported ingestion job type: {job.job_type}")

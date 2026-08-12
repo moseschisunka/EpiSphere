@@ -7,12 +7,13 @@ class DHIS2SyncRequest(BaseModel):
     payload: Dict[str, Any]
     mapping_id: Optional[int] = None
     dry_run: bool = False
+    enqueue: bool = False
 
 
 class DHIS2SyncResponse(BaseModel):
     success: bool
     status: str
-    log_id: int
+    log_id: int | None = None
     dry_run: bool
     errors: list[str] = []
     message: str
@@ -25,13 +26,16 @@ class DHIS2PullRequest(BaseModel):
     mapping: Dict[str, int] = Field(..., min_length=1, description="Mapping of DHIS2 data element UUID to internal Disease ID")
     country_id: int = Field(..., gt=0, description="Internal Country ID to assign the data to")
     dry_run: bool = False
+    enqueue: bool = False
 
 
 class DHIS2PullResponse(BaseModel):
     success: bool
     status: str
-    log_id: int
+    log_id: int | None = None
     records_imported: int
     dry_run: bool
     errors: list[str] = []
     message: str
+    job_id: int | None = None
+    job_id: int | None = None
