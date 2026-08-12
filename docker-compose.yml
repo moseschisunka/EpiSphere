@@ -42,6 +42,7 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-episphere}:${POSTGRES_PASSWORD:-episphere_password}@postgres:5432/${POSTGRES_DB:-episphere_db}
       REDIS_URL: redis://redis:6379/0
+      REDIS_REQUIRED: ${REDIS_REQUIRED:-false}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       SECRET_KEY: ${SECRET_KEY:-change-this-in-development}
       ALGORITHM: HS256
@@ -58,6 +59,7 @@ services:
       PUBLIC_DISCLOSURE_THRESHOLD: ${PUBLIC_DISCLOSURE_THRESHOLD:-5}
       SECURITY_TOKEN_RETENTION_DAYS: ${SECURITY_TOKEN_RETENTION_DAYS:-1}
       NOTIFICATION_RETENTION_DAYS: ${NOTIFICATION_RETENTION_DAYS:-180}
+      WORKER_STALE_AFTER_MINUTES: ${WORKER_STALE_AFTER_MINUTES:-15}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_REQUIRED: bool = False
 
     # Security
     SECRET_KEY: str = "change-this-secret-key-in-production"
@@ -56,6 +57,10 @@ class Settings(BaseSettings):
     # operator explicitly passes --apply.
     SECURITY_TOKEN_RETENTION_DAYS: int = 1
     NOTIFICATION_RETENTION_DAYS: int = 180
+
+    # Worker readiness controls. A stale RUNNING job indicates a worker may
+    # have stopped after claiming work and should fail the component probe.
+    WORKER_STALE_AFTER_MINUTES: int = 15
 
     # Interoperability
     DHIS2_URL: str = ""

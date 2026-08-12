@@ -25,6 +25,7 @@ docker compose up -d
 docker compose ps
 Invoke-WebRequest http://localhost:8000/health
 Invoke-WebRequest http://localhost:8000/ready
+Invoke-WebRequest http://localhost:8000/ready/components
 ```
 
 The backend entrypoint applies Alembic migrations before starting Gunicorn.

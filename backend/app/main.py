@@ -4,6 +4,7 @@ Production-ready global public health surveillance platform
 """
 
 import time
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
@@ -11,7 +12,7 @@ from fastapi.responses import PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from contextlib import asynccontextmanager
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from slowapi.errors import RateLimitExceeded
@@ -22,7 +23,9 @@ from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.logger import setup_logging
 from app.core.database import SessionLocal
+from app.core.cache import redis_client
 from app.core.metrics import request_metrics
+from app.db.models import IngestionJob, IngestionJobStatus
 from app.api.v1.api import api_router
 
 logger = setup_logging()
@@ -123,6 +126,65 @@ def readiness_check():
         logger.error("Readiness check failed: %s", exc)
         raise HTTPException(status_code=503, detail="Database is not ready") from exc
     return {"status": "ready"}
+
+
+@app.get("/ready/components")
+def component_readiness_check():
+    """Return deployment readiness for the database, queue, Redis, and storage."""
+    components = {}
+    failures = []
+
+    try:
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+            queued_jobs = db.query(func.count(IngestionJob.id)).filter(
+                IngestionJob.status == IngestionJobStatus.QUEUED
+            ).scalar() or 0
+            running_jobs = db.query(func.count(IngestionJob.id)).filter(
+                IngestionJob.status == IngestionJobStatus.RUNNING
+            ).scalar() or 0
+            stale_cutoff = datetime.utcnow() - timedelta(minutes=settings.WORKER_STALE_AFTER_MINUTES)
+            stale_running_jobs = db.query(func.count(IngestionJob.id)).filter(
+                IngestionJob.status == IngestionJobStatus.RUNNING,
+                IngestionJob.started_at.isnot(None),
+                IngestionJob.started_at < stale_cutoff,
+            ).scalar() or 0
+        components["database"] = {"status": "ready"}
+        components["ingestion_worker_queue"] = {
+            "status": "ready" if stale_running_jobs == 0 else "failed",
+            "queued_jobs": queued_jobs,
+            "running_jobs": running_jobs,
+            "stale_running_jobs": stale_running_jobs,
+        }
+        if stale_running_jobs:
+            failures.append("ingestion_worker_queue")
+    except SQLAlchemyError as exc:
+        logger.error("Component readiness database check failed: %s", exc)
+        components["database"] = {"status": "failed"}
+        components["ingestion_worker_queue"] = {"status": "unknown"}
+        failures.append("database")
+
+    if settings.REDIS_REQUIRED:
+        try:
+            redis_client.ping()
+            components["redis"] = {"status": "ready"}
+        except Exception as exc:
+            logger.error("Component readiness Redis check failed: %s", exc)
+            components["redis"] = {"status": "failed"}
+            failures.append("redis")
+    else:
+        components["redis"] = {"status": "not_required"}
+
+    components["upload_storage"] = {
+        "status": "ready" if settings.UPLOAD_DIR.exists() and settings.UPLOAD_DIR.is_dir() else "failed"
+    }
+    if components["upload_storage"]["status"] == "failed":
+        failures.append("upload_storage")
+
+    payload = {"status": "ready" if not failures else "not_ready", "components": components}
+    if failures:
+        raise HTTPException(status_code=503, detail=payload)
+    return payload
 
 
 @app.get("/metrics", include_in_schema=False)
