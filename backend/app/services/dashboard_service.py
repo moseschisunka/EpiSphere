@@ -1,7 +1,7 @@
 ﻿"""Dashboard service."""
 
 from typing import Optional
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from statistics import median
 
 from sqlalchemy import func, and_
@@ -63,7 +63,12 @@ class DashboardService:
         data_completeness = min(observed_points / (expected_groups * expected_days), 1.0) if latest_rows else 0.0
 
         active_alerts = self.db.query(func.count(Alert.id)).filter(
-            Alert.status.in_([AlertStatus.TRIGGERED, AlertStatus.INVESTIGATING])
+            Alert.status.in_([
+                AlertStatus.TRIGGERED,
+                AlertStatus.ACKNOWLEDGED,
+                AlertStatus.INVESTIGATING,
+                AlertStatus.ESCALATED,
+            ])
         ).scalar() or 0
 
         global_stats = GlobalStats(
@@ -173,6 +178,36 @@ class DashboardService:
             } if latest else None,
         }
 
+    def get_operations_dashboard(self, country_id: int | None = None) -> dict:
+        """Return authoritative response-operations worklists and reporting freshness."""
+        active_statuses = [AlertStatus.TRIGGERED, AlertStatus.ACKNOWLEDGED, AlertStatus.INVESTIGATING, AlertStatus.ESCALATED]
+        alert_query = self.db.query(Alert).filter(Alert.status.in_(active_statuses))
+        if country_id is not None:
+            alert_query = alert_query.filter(Alert.country_id == country_id)
+        alerts = alert_query.order_by(Alert.severity.desc(), Alert.triggered_at.asc()).all()
+        now = datetime.utcnow()
+        queue = []
+        for alert in alerts:
+            age_hours = max((now - alert.triggered_at).total_seconds() / 3600, 0) if alert.triggered_at else 0
+            sla_hours = 24 if alert.severity == AlertSeverity.HIGH else 72
+            queue.append({
+                "id": alert.id, "country_id": alert.country_id,
+                "country_name": alert.country.name if alert.country else "Unknown",
+                "disease_name": alert.disease.name if alert.disease else "Unknown",
+                "severity": alert.severity.value, "status": alert.status.value,
+                "triggered_at": alert.triggered_at, "assigned_to": alert.assigned_to,
+                "age_hours": round(age_hours, 1), "sla_due": age_hours >= sla_hours,
+            })
+        latest = self.db.query(Case.country_id, func.max(Case.date).label("latest_data_date")).group_by(Case.country_id)
+        if country_id is not None:
+            latest = latest.filter(Case.country_id == country_id)
+        delays = []
+        for row in latest.all():
+            country = self.db.query(Country).filter(Country.id == row.country_id).first()
+            lag = (date.today() - row.latest_data_date).days if row.latest_data_date else None
+            delays.append({"country_id": row.country_id, "country_name": country.name if country else "Unknown", "latest_data_date": row.latest_data_date, "reporting_lag_days": lag, "freshness_status": self._freshness_status(lag)})
+        return {"active_alerts": len(queue), "overdue_alerts": sum(item["sla_due"] for item in queue), "unassigned_alerts": sum(item["assigned_to"] is None for item in queue), "alert_queue": queue, "reporting_delays": sorted(delays, key=lambda item: item["reporting_lag_days"] if item["reporting_lag_days"] is not None else -1, reverse=True)}
+
     def _country_stats_from_latest(self, latest_rows: list[Case], end_date: date) -> list[CountryStats]:
         stats: list[CountryStats] = []
         for row in latest_rows:
@@ -198,6 +233,8 @@ class DashboardService:
                 reporting_lag_days=reporting_lag,
                 data_quality_score=row.data_quality_score,
                 data_freshness_status=self._freshness_status(reporting_lag),
+                latitude=row.country.latitude if row.country else None,
+                longitude=row.country.longitude if row.country else None,
             ))
         return stats
 
@@ -223,9 +260,9 @@ class DashboardService:
 
     def _alerts_summary(self) -> dict:
         return {
-            "low": self.db.query(func.count(Alert.id)).filter(Alert.severity == AlertSeverity.LOW, Alert.status.in_([AlertStatus.TRIGGERED, AlertStatus.INVESTIGATING])).scalar() or 0,
-            "moderate": self.db.query(func.count(Alert.id)).filter(Alert.severity == AlertSeverity.MODERATE, Alert.status.in_([AlertStatus.TRIGGERED, AlertStatus.INVESTIGATING])).scalar() or 0,
-            "high": self.db.query(func.count(Alert.id)).filter(Alert.severity == AlertSeverity.HIGH, Alert.status.in_([AlertStatus.TRIGGERED, AlertStatus.INVESTIGATING])).scalar() or 0,
+            "low": self.db.query(func.count(Alert.id)).filter(Alert.severity == AlertSeverity.LOW, Alert.status.in_([AlertStatus.TRIGGERED, AlertStatus.ACKNOWLEDGED, AlertStatus.INVESTIGATING, AlertStatus.ESCALATED])).scalar() or 0,
+            "moderate": self.db.query(func.count(Alert.id)).filter(Alert.severity == AlertSeverity.MODERATE, Alert.status.in_([AlertStatus.TRIGGERED, AlertStatus.ACKNOWLEDGED, AlertStatus.INVESTIGATING, AlertStatus.ESCALATED])).scalar() or 0,
+            "high": self.db.query(func.count(Alert.id)).filter(Alert.severity == AlertSeverity.HIGH, Alert.status.in_([AlertStatus.TRIGGERED, AlertStatus.ACKNOWLEDGED, AlertStatus.INVESTIGATING, AlertStatus.ESCALATED])).scalar() or 0,
         }
 
     def _freshness_status(self, lag_days: Optional[int]) -> str:
@@ -238,9 +275,9 @@ class DashboardService:
         return "stale"
 
     @staticmethod
-    def get_facility_heatmap(db: Session) -> list:
-        """Get aggregated encounter counts per geocoded facility for heatmaps."""
-        results = db.query(
+    def get_facility_heatmap(db: Session, facility_id: int | None = None) -> list:
+        """Get aggregated encounter counts, optionally for one facility."""
+        query = db.query(
             Facility.name,
             Facility.type,
             Facility.location,
@@ -250,7 +287,10 @@ class DashboardService:
             Facility.admin1_code,
             Facility.admin2_code,
             func.count(Encounter.id).label("visit_count"),
-        ).join(Encounter).group_by(Facility.id).all()
+        ).join(Encounter)
+        if facility_id is not None:
+            query = query.filter(Facility.id == facility_id)
+        results = query.group_by(Facility.id).all()
 
         heatmap_data = []
         for row in results:

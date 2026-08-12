@@ -1,6 +1,8 @@
 """Data upload, lineage, and validation service."""
 
 import io
+import hashlib
+import zipfile
 from typing import Dict, Any, Optional
 from datetime import datetime, date
 
@@ -17,6 +19,7 @@ from app.db.models import (
     SourceSystem,
     ImportBatch,
     ImportRowError,
+    ImportStagedCase,
     DataQualityCheck,
     ImportStatus,
     QualitySeverity,
@@ -68,6 +71,11 @@ class DataUploadService:
             )
 
         df = self._read_dataframe(contents, file_ext)
+        if len(df) > settings.MAX_UPLOAD_ROWS:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Dataset exceeds maximum row limit",
+            )
         df.columns = [str(col).strip() for col in df.columns]
 
         country = self.db.query(Country).filter(Country.id == country_id).first()
@@ -91,6 +99,10 @@ class DataUploadService:
             batch_metadata={
                 "columns": list(df.columns),
                 "commit_requested": commit,
+                "sha256": hashlib.sha256(contents).hexdigest(),
+                "dataset_contract_version": "case_timeseries/v1",
+                "mapping_version": "manual_upload/v1",
+                "transformation_version": "manual_upload/v1",
                 "country": country.iso_code,
                 "disease": disease.name,
             },
@@ -106,7 +118,9 @@ class DataUploadService:
         if missing_columns:
             issues.append(self._issue(batch.id, 1, None, QualitySeverity.ERROR, f"Missing required columns: {', '.join(missing_columns)}"))
         else:
-            validated_cases, issues = self._validate_rows(df, batch, country_id, disease_id, source_system.id)
+            validated_cases, issues = self._validate_rows(
+                df, batch, country_id, disease_id, source_system.id, source_system.code
+            )
             quality_checks = self._build_quality_checks(batch.id, df, validated_cases, issues)
 
         errors = [issue for issue in issues if issue.severity == QualitySeverity.ERROR]
@@ -120,6 +134,12 @@ class DataUploadService:
             self.db.add(issue)
         for check in quality_checks:
             self.db.add(check)
+
+        # Preserve every validated row before a commit decision. This lets the
+        # data officer validate, inspect issues, and approve a batch later
+        # without asking the browser to re-upload the source file.
+        if not errors:
+            self._stage_cases(batch, validated_cases)
 
         committed_count = 0
         if errors:
@@ -154,6 +174,75 @@ class DataUploadService:
 
         return self._result(batch, issues, quality_checks, committed=committed_count > 0)
 
+    def commit_validated_batch(self, batch_id: int, user_id: int) -> Dict[str, Any]:
+        """Commit an already validated upload after an explicit review decision."""
+        batch = self.db.query(ImportBatch).filter(ImportBatch.id == batch_id).first()
+        if not batch:
+            raise HTTPException(status_code=404, detail="Import batch not found")
+        if batch.status != ImportStatus.VALIDATED:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Only validated import batches can be committed",
+            )
+        if batch.error_count:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Batches with validation errors cannot be committed")
+
+        blocking_checks = (
+            self.db.query(DataQualityCheck)
+            .filter(
+                DataQualityCheck.batch_id == batch.id,
+                DataQualityCheck.severity == QualitySeverity.ERROR,
+                DataQualityCheck.passed.is_(False),
+            )
+            .order_by(DataQualityCheck.check_name)
+            .all()
+        )
+        if blocking_checks:
+            names = ", ".join(check.check_name for check in blocking_checks)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Batch failed required quality checks: {names}",
+            )
+
+        staged_rows = (
+            self.db.query(ImportStagedCase)
+            .filter(ImportStagedCase.batch_id == batch.id)
+            .order_by(ImportStagedCase.row_number)
+            .all()
+        )
+        if not staged_rows:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No validated rows are available for commit")
+
+        committed_count = self._commit_cases([self._case_from_staged_payload(row.payload) for row in staged_rows])
+        batch.rows_committed = committed_count
+        batch.committed_at = datetime.utcnow()
+        batch.status = ImportStatus.COMMITTED
+        metadata = dict(batch.batch_metadata or {})
+        metadata.update({"committed_by": user_id, "approved_at": batch.committed_at.isoformat()})
+        batch.batch_metadata = metadata
+        self.db.add(AuditLog(
+            user_id=user_id,
+            action=AuditAction.UPDATE,
+            resource_type="import_batch",
+            resource_id=batch.id,
+            details={
+                "event": "validated_batch_committed",
+                "rows_committed": committed_count,
+                "source_system_id": batch.source_system_id,
+            },
+        ))
+        self.db.commit()
+        self.db.refresh(batch)
+
+        issues = (
+            self.db.query(ImportRowError)
+            .filter(ImportRowError.batch_id == batch.id)
+            .order_by(ImportRowError.row_number)
+            .all()
+        )
+        checks = self.db.query(DataQualityCheck).filter(DataQualityCheck.batch_id == batch.id).all()
+        return self._result(batch, issues, checks, committed=True)
+
     def _validate_file_name(self, filename: Optional[str]) -> str:
         if not filename or "." not in filename:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file name")
@@ -170,9 +259,33 @@ class DataUploadService:
         try:
             if file_ext == "csv":
                 return pd.read_csv(io.BytesIO(contents))
+            if file_ext == "xlsx":
+                self._validate_xlsx_archive(contents)
             return pd.read_excel(io.BytesIO(contents))
         except Exception as e:
+            if isinstance(e, HTTPException):
+                raise
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Error reading file: {str(e)}")
+
+    @staticmethod
+    def _validate_xlsx_archive(contents: bytes) -> None:
+        """Reject ZIP-based XLSX files that exceed safe expansion limits before parsing."""
+        try:
+            with zipfile.ZipFile(io.BytesIO(contents)) as archive:
+                members = archive.infolist()
+                if len(members) > settings.MAX_XLSX_ARCHIVE_MEMBERS:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail="XLSX contains too many archive members",
+                    )
+                uncompressed_size = sum(member.file_size for member in members)
+                if uncompressed_size > settings.MAX_XLSX_UNCOMPRESSED_SIZE:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail="XLSX exceeds maximum expanded size",
+                    )
+        except zipfile.BadZipFile:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid XLSX archive")
 
     def _get_or_create_source_system(self, code: str) -> SourceSystem:
         normalized = code.strip().lower() or "manual_upload"
@@ -197,6 +310,7 @@ class DataUploadService:
         country_id: int,
         disease_id: int,
         source_system_id: int,
+        source_system_code: str,
     ) -> tuple[list[Case], list[ImportRowError]]:
         issues: list[ImportRowError] = []
         cases: list[Case] = []
@@ -269,6 +383,9 @@ class DataUploadService:
                 subnational_region=subnational_region,
                 source=self._optional_text(row.get("source")) or batch.filename,
                 source_system_id=source_system_id,
+                source_record_id=hashlib.sha256(
+                    f"{source_system_code}|{batch.filename}|{country_id}|{disease_id}|{date_value.isoformat()}|{subnational_region or ''}".encode("utf-8")
+                ).hexdigest(),
                 import_batch_id=batch.id,
                 reporting_period_start=reporting_period_start,
                 reporting_period_end=reporting_period_end,
@@ -284,21 +401,27 @@ class DataUploadService:
     def _commit_cases(self, cases: list[Case]) -> int:
         committed = 0
         for case in cases:
-            existing_query = self.db.query(Case).filter(
-                Case.country_id == case.country_id,
-                Case.disease_id == case.disease_id,
-                Case.date == case.date,
-            )
-            if case.subnational_region:
-                existing_query = existing_query.filter(Case.subnational_region == case.subnational_region)
+            if case.source_system_id and case.source_record_id:
+                existing_query = self.db.query(Case).filter(
+                    Case.source_system_id == case.source_system_id,
+                    Case.source_record_id == case.source_record_id,
+                )
             else:
-                existing_query = existing_query.filter(Case.subnational_region.is_(None))
+                existing_query = self.db.query(Case).filter(
+                    Case.country_id == case.country_id,
+                    Case.disease_id == case.disease_id,
+                    Case.date == case.date,
+                )
+                if case.subnational_region:
+                    existing_query = existing_query.filter(Case.subnational_region == case.subnational_region)
+                else:
+                    existing_query = existing_query.filter(Case.subnational_region.is_(None))
 
             existing = existing_query.first()
             if existing:
                 for field in [
                     "daily_cases", "cumulative_cases", "daily_deaths", "cumulative_deaths",
-                    "daily_recovered", "cumulative_recovered", "source", "source_system_id",
+                    "daily_recovered", "cumulative_recovered", "source", "source_system_id", "source_record_id",
                     "import_batch_id", "reporting_period_start", "reporting_period_end",
                     "reporting_level", "case_definition", "confirmation_status", "data_quality_score", "notes",
                 ]:
@@ -309,6 +432,47 @@ class DataUploadService:
             committed += 1
         self.db.flush()
         return committed
+
+    def _stage_cases(self, batch: ImportBatch, cases: list[Case]) -> None:
+        for row_number, case in enumerate(cases, start=1):
+            self.db.add(ImportStagedCase(
+                batch_id=batch.id,
+                row_number=row_number,
+                payload=self._staged_payload(case),
+            ))
+
+    def _staged_payload(self, case: Case) -> Dict[str, Any]:
+        payload = {
+            "country_id": case.country_id,
+            "disease_id": case.disease_id,
+            "date": case.date.isoformat(),
+            "daily_cases": case.daily_cases,
+            "cumulative_cases": case.cumulative_cases,
+            "daily_deaths": case.daily_deaths,
+            "cumulative_deaths": case.cumulative_deaths,
+            "daily_recovered": case.daily_recovered,
+            "cumulative_recovered": case.cumulative_recovered,
+            "subnational_region": case.subnational_region,
+            "source": case.source,
+            "source_system_id": case.source_system_id,
+            "source_record_id": case.source_record_id,
+            "import_batch_id": case.import_batch_id,
+            "reporting_period_start": case.reporting_period_start.isoformat() if case.reporting_period_start else None,
+            "reporting_period_end": case.reporting_period_end.isoformat() if case.reporting_period_end else None,
+            "reporting_level": case.reporting_level,
+            "case_definition": case.case_definition,
+            "confirmation_status": case.confirmation_status,
+            "data_quality_score": case.data_quality_score,
+            "notes": case.notes,
+        }
+        return payload
+
+    def _case_from_staged_payload(self, payload: Dict[str, Any]) -> Case:
+        values = dict(payload)
+        for field in ("date", "reporting_period_start", "reporting_period_end"):
+            if values.get(field):
+                values[field] = date.fromisoformat(values[field])
+        return Case(**values)
 
     def _build_quality_checks(
         self,

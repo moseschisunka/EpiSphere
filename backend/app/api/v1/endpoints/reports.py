@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user, require_role
+from app.core.dependencies import apply_country_scope, enforce_country_scope, is_admin_user, require_role
 from app.db.models import Report, User
 from app.schemas.report import ReportRequest, ReportResponse
 from app.services.report_service import ReportService
@@ -20,6 +20,10 @@ async def generate_report(
     db: Session = Depends(get_db)
 ):
     """Generate a report"""
+    if report_request.country_id is None and not is_admin_user(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Country-scoped reports require a country")
+    if report_request.country_id is not None:
+        enforce_country_scope(current_user, report_request.country_id)
     service = ReportService(db)
     
     try:
@@ -46,7 +50,7 @@ async def generate_report(
             file_format=report.file_format,
             generated_by=report.generated_by,
             generated_at=report.generated_at,
-            metadata=report.report_metadata
+            report_metadata=report.report_metadata
         )
     
     except Exception as e:
@@ -60,11 +64,11 @@ async def generate_report(
 async def list_reports(
     skip: int = 0,
     limit: int = 100,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_role(["epidemiologist", "admin", "country_data_officer"])),
     db: Session = Depends(get_db)
 ):
     """List reports"""
-    reports = db.query(Report).order_by(Report.generated_at.desc()).offset(skip).limit(limit).all()
+    reports = apply_country_scope(db.query(Report), Report, current_user).order_by(Report.generated_at.desc()).offset(skip).limit(limit).all()
     
     return [
         ReportResponse(
@@ -79,7 +83,7 @@ async def list_reports(
             file_format=r.file_format,
             generated_by=r.generated_by,
             generated_at=r.generated_at,
-            metadata=r.metadata
+            report_metadata=r.report_metadata
         )
         for r in reports
     ]
@@ -88,11 +92,13 @@ async def list_reports(
 @router.get("/{report_id}", response_model=ReportResponse)
 async def get_report(
     report_id: int,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_role(["epidemiologist", "admin", "country_data_officer"])),
     db: Session = Depends(get_db)
 ):
     """Get report by ID"""
-    report = db.query(Report).filter(Report.id == report_id).first()
+    report = apply_country_scope(
+        db.query(Report).filter(Report.id == report_id), Report, current_user
+    ).first()
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     
@@ -108,5 +114,5 @@ async def get_report(
         file_format=report.file_format,
         generated_by=report.generated_by,
         generated_at=report.generated_at,
-        metadata=report.metadata
+        report_metadata=report.report_metadata
     )

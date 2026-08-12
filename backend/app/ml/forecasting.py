@@ -124,6 +124,7 @@ class ForecastingPipeline:
                         "cutoff_date": train.index[-1].date().isoformat(),
                         "mae": float(np.mean(np.abs(errors))),
                         "rmse": float(np.sqrt(np.mean(errors ** 2))),
+                        "mean_bias": float(np.mean(errors)),
                         "smape": float(np.mean(2 * np.abs(errors) / np.maximum(np.abs(predicted) + np.abs(observed), 1.0))),
                         "mape_guarded": float(np.mean(np.abs(errors) / denominator)),
                         "interval_coverage": interval_coverage,
@@ -136,8 +137,10 @@ class ForecastingPipeline:
                 "folds": fold_metrics,
                 "mean_mae": float(np.mean([m["mae"] for m in valid])) if valid else None,
                 "mean_rmse": float(np.mean([m["rmse"] for m in valid])) if valid else None,
+                "mean_bias": float(np.mean([m["mean_bias"] for m in valid])) if valid else None,
                 "mean_smape": float(np.mean([m["smape"] for m in valid])) if valid else None,
                 "mean_interval_coverage": float(np.mean([m["interval_coverage"] for m in valid])) if valid else None,
+                "mae_stability": float(np.std([m["mae"] for m in valid])) if len(valid) > 1 else 0.0,
                 "valid_folds": len(valid),
             }
         return results

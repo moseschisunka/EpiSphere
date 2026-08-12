@@ -1,0 +1,186 @@
+{
+  "name": "EpiSphere - Public Dataset Ingestion (Daily)",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "dataset-schedule",
+      "name": "Daily schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        260,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dataset-url",
+              "name": "url",
+              "type": "string",
+              "value": "https://raw.githubusercontent.com/ORG/REPO/main/data.csv"
+            },
+            {
+              "id": "dataset-disease-id",
+              "name": "disease_id",
+              "type": "number",
+              "value": 2
+            },
+            {
+              "id": "dataset-mapping",
+              "name": "mapping",
+              "type": "object",
+              "value": "{\"country_iso\":\"Country\",\"date\":\"Date\",\"daily_cases\":\"Cases\",\"daily_deaths\":\"Deaths\"}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "dataset-config",
+      "name": "Configure approved dataset",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:8000/api/v1/datasets/ingest-csv",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "__SET_FROM_ENCRYPTED_N8N_DATASET_CREDENTIAL__"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"url\": $json.url, \"disease_id\": $json.disease_id, \"mapping\": $json.mapping, \"mapping_version\": \"n8n-template-v1\", \"dry_run\": true, \"enqueue\": true}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "dataset-ingest",
+      "name": "Validate dataset in EpiSphere",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "position": [
+        760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "dataset-wait-for-worker",
+      "name": "Wait for ingestion worker",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=http://backend:8000/api/v1/ingestion/jobs/{{$json.job_id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "__SET_FROM_ENCRYPTED_N8N_DATASET_CREDENTIAL__"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "dataset-poll-job",
+      "name": "Check ingestion job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "position": [
+        1240,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily schedule": {
+      "main": [
+        [
+          {
+            "node": "Configure approved dataset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configure approved dataset": {
+      "main": [
+        [
+          {
+            "node": "Validate dataset in EpiSphere",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate dataset in EpiSphere": {
+      "main": [
+        [
+          {
+            "node": "Wait for ingestion worker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for ingestion worker": {
+      "main": [
+        [
+          {
+            "node": "Check ingestion job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

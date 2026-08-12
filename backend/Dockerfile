@@ -9,9 +9,12 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
+# Copy requirements and replace the base image's setuptools.  Its older
+# vendored packages contain known vulnerabilities even though EpiSphere does
+# not directly depend on them at runtime.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade setuptools==84.0.0 \
+    && pip install --no-cache-dir -r requirements.txt
 
 # Create a non-root user and group
 RUN groupadd -r episphere && useradd -r -g episphere episphere

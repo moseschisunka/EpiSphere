@@ -26,9 +26,25 @@ class AlertSeverity(str, enum.Enum):
 class AlertStatus(str, enum.Enum):
     """Alert lifecycle status"""
     TRIGGERED = "triggered"
+    ACKNOWLEDGED = "acknowledged"
     INVESTIGATING = "investigating"
+    ESCALATED = "escalated"
     RESOLVED = "resolved"
     FALSE_POSITIVE = "false_positive"
+    CLOSED = "closed"
+
+
+class NotificationStatus(str, enum.Enum):
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+
+
+class ReviewStatus(str, enum.Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    INCONCLUSIVE = "inconclusive"
 
 
 class ReportType(str, enum.Enum):
@@ -84,6 +100,16 @@ class ImportStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class IngestionJobStatus(str, enum.Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCEL_REQUESTED = "cancel_requested"
+    CANCELLED = "cancelled"
+    DEAD_LETTER = "dead_letter"
+
+
 class QualitySeverity(str, enum.Enum):
     INFO = "info"
     WARNING = "warning"
@@ -130,8 +156,22 @@ class User(Base):
     is_verified = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login = Column(DateTime, nullable=True)
+    token_version = Column(Integer, nullable=False, default=0)
+    mfa_enabled = Column(Boolean, nullable=False, default=False)
+    mfa_secret = Column(String(64), nullable=True)
+    mfa_pending_secret = Column(String(64), nullable=True)
     
     role = relationship("Role", back_populates="users")
+
+    @property
+    def roles(self) -> list[str]:
+        """Compatibility-safe role names for the authenticated UI contract.
+
+        EpiSphere currently assigns one operational role per user, but clients
+        consume a list to avoid baking that storage decision into navigation and
+        authorization UX.
+        """
+        return [self.role.name] if self.role and self.role.name else []
     country = relationship("Country", back_populates="users")
     facility = relationship("Facility", back_populates="users")
     audit_logs = relationship("AuditLog", back_populates="user")
@@ -146,6 +186,25 @@ class User(Base):
     
     def __repr__(self):
         return f"<User(username='{self.username}', email='{self.email}')>"
+
+
+class UserSecurityToken(Base):
+    """Single-use, hashed tokens for account security workflows."""
+    __tablename__ = "user_security_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    token_type = Column(String(40), nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("idx_user_security_token_active", "user_id", "token_type", "used_at"),
+    )
 
 
 class Country(Base):
@@ -238,6 +297,7 @@ class Case(Base):
     subnational_region = Column(String(255), nullable=True)  # For subnational data
     source = Column(String(255), nullable=True)  # Data source
     source_system_id = Column(Integer, ForeignKey("source_systems.id"), nullable=True, index=True)
+    source_record_id = Column(String(255), nullable=True, index=True)
     import_batch_id = Column(Integer, ForeignKey("import_batches.id"), nullable=True, index=True)
     reporting_period_start = Column(Date, nullable=True)
     reporting_period_end = Column(Date, nullable=True)
@@ -258,6 +318,7 @@ class Case(Base):
     __table_args__ = (
         Index("idx_case_country_disease_date", "country_id", "disease_id", "date"),
         Index("idx_case_lineage", "source_system_id", "import_batch_id"),
+        UniqueConstraint("source_system_id", "source_record_id", name="uq_case_source_record"),
         Index("idx_case_date", "date"),
         Index("idx_case_created", "created_at"),
     )
@@ -283,11 +344,28 @@ class Alert(Base):
     investigated_at = Column(DateTime, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
     investigated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    acknowledged_at = Column(DateTime, nullable=True)
+    acknowledged_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
+    escalated_at = Column(DateTime, nullable=True)
+    escalated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reopened_at = Column(DateTime, nullable=True)
+    closed_at = Column(DateTime, nullable=True)
+    review_status = Column(SQLEnum(ReviewStatus), nullable=False, default=ReviewStatus.PENDING, index=True)
+    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    review_notes = Column(Text, nullable=True)
+    investigation_notes = Column(Text, nullable=True)
+    evidence_references = Column(JSON, nullable=True)
     resolution_notes = Column(Text, nullable=True)
     
     country = relationship("Country", back_populates="alerts")
     disease = relationship("Disease", back_populates="alerts")
     investigator = relationship("User", foreign_keys=[investigated_by])
+    acknowledger = relationship("User", foreign_keys=[acknowledged_by])
+    assignee = relationship("User", foreign_keys=[assigned_to])
+    escalator = relationship("User", foreign_keys=[escalated_by])
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
     
     __table_args__ = (
         Index("idx_alert_country_disease", "country_id", "disease_id"),
@@ -298,6 +376,36 @@ class Alert(Base):
     
     def __repr__(self):
         return f"<Alert(country_id={self.country_id}, disease_id={self.disease_id}, severity='{self.severity}')>"
+
+
+class AlertNotification(Base):
+    """Durable outbox record for response notifications."""
+    __tablename__ = "alert_notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    alert_id = Column(Integer, ForeignKey("alerts.id"), nullable=False, index=True)
+    recipient_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    recipient_email = Column(String(255), nullable=False)
+    channel = Column(String(30), nullable=False, default="email")
+    event_type = Column(String(50), nullable=False)
+    status = Column(SQLEnum(NotificationStatus), nullable=False, default=NotificationStatus.PENDING, index=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    subject = Column(String(255), nullable=False)
+    payload = Column(JSON, nullable=False)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    next_attempt_at = Column(DateTime, nullable=True, index=True)
+    sent_at = Column(DateTime, nullable=True)
+
+    alert = relationship("Alert")
+    recipient = relationship("User", foreign_keys=[recipient_user_id])
+
+    __table_args__ = (
+        UniqueConstraint("alert_id", "event_type", "recipient_email", name="uq_alert_notification_recipient"),
+    )
+
+    def __repr__(self):
+        return f"<AlertNotification(alert={self.alert_id}, recipient='{self.recipient_email}', status='{self.status}')>"
 
 
 class Forecast(Base):
@@ -427,12 +535,80 @@ class ImportBatch(Base):
     uploader = relationship("User")
     row_errors = relationship("ImportRowError", back_populates="batch", cascade="all, delete-orphan")
     quality_checks = relationship("DataQualityCheck", back_populates="batch", cascade="all, delete-orphan")
+    staged_cases = relationship("ImportStagedCase", back_populates="batch", cascade="all, delete-orphan")
     cases = relationship("Case", back_populates="import_batch")
+    jobs = relationship("IngestionJob", back_populates="import_batch")
 
     __table_args__ = (
         Index("idx_import_batch_status_uploaded", "status", "uploaded_at"),
         Index("idx_import_batch_scope", "country_id", "disease_id", "dataset_type"),
     )
+
+
+class ImportStagedCase(Base):
+    """Validated case payload held for a data-officer approval decision."""
+
+    __tablename__ = "import_staged_cases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    batch_id = Column(Integer, ForeignKey("import_batches.id"), nullable=False, index=True)
+    row_number = Column(Integer, nullable=False)
+    payload = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    batch = relationship("ImportBatch", back_populates="staged_cases")
+
+    __table_args__ = (
+        UniqueConstraint("batch_id", "row_number", name="uq_import_staged_case_batch_row"),
+        Index("idx_import_staged_case_batch", "batch_id"),
+    )
+
+
+class IngestionJob(Base):
+    """Durable worker job envelope for long-running ingestion operations."""
+
+    __tablename__ = "ingestion_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    job_type = Column(String(100), nullable=False, index=True)
+    status = Column(SQLEnum(IngestionJobStatus), nullable=False, default=IngestionJobStatus.QUEUED, index=True)
+    payload = Column(JSON, nullable=False, default=dict)
+    result = Column(JSON, nullable=True)
+    error = Column(Text, nullable=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=3)
+    available_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    cancel_requested_at = Column(DateTime, nullable=True)
+    worker_id = Column(String(255), nullable=True)
+    import_batch_id = Column(Integer, ForeignKey("import_batches.id"), nullable=True, index=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    import_batch = relationship("ImportBatch", back_populates="jobs")
+    creator = relationship("User")
+
+    __table_args__ = (
+        Index("idx_ingestion_job_queue", "status", "available_at"),
+        Index("idx_ingestion_job_type_created", "job_type", "created_at"),
+    )
+
+
+class WorkerHeartbeat(Base):
+    """Latest liveness signal from a durable background worker."""
+
+    __tablename__ = "worker_heartbeats"
+
+    worker_id = Column(String(255), primary_key=True)
+    worker_type = Column(String(100), nullable=False, index=True)
+    started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    last_heartbeat_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    last_job_id = Column(Integer, ForeignKey("ingestion_jobs.id"), nullable=True)
+    last_error = Column(Text, nullable=True)
+
+    last_job = relationship("IngestionJob")
 
 
 class ImportRowError(Base):

@@ -105,7 +105,7 @@ export default function ClinicalDesk() {
     // Encounter Form State
     const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([])
     const [diagnosisDiseaseId, setDiagnosisDiseaseId] = useState('')
-    const [diagnosisType, setDiagnosisType] = useState('suspected')
+    const [diagnosisType, setDiagnosisType] = useState<'suspected' | 'confirmed'>('suspected')
     const [rxDrug, setRxDrug] = useState('')
     const [rxDosage, setRxDosage] = useState('')
     const [rxQty, setRxQty] = useState(1)
@@ -394,7 +394,7 @@ export default function ClinicalDesk() {
                                             <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1.5">Classification</label>
                                             <select
                                                 value={diagnosisType}
-                                                onChange={e => setDiagnosisType(e.target.value)}
+                                                onChange={e => setDiagnosisType(e.target.value as 'suspected' | 'confirmed')}
                                                 className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-2.5 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 outline-none transition-all"
                                             >
                                                 <option value="suspected">Suspected</option>

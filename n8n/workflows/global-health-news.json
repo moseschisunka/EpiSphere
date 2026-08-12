@@ -1,0 +1,124 @@
+{
+  "name": "EpiSphere - Global Health News (Daily)",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "global-health-news-schedule",
+      "name": "Daily schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        260,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.who.int/rss-feeds/news-english.xml"
+      },
+      "id": "global-health-news-rss",
+      "name": "WHO news RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "maxItems": 5
+      },
+      "id": "global-health-news-limit",
+      "name": "Limit newest five",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        740,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:8000/api/v1/news",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "__SET_FROM_ENCRYPTED_N8N_NEWS_CREDENTIAL__"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"title\": $json.title, \"summary\": $json.contentSnippet || $json.content, \"content\": $json.content || $json.contentSnippet, \"source\": \"WHO RSS\", \"is_public\": true}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "global-health-news-push",
+      "name": "Push to EpiSphere",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "position": [
+        980,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily schedule": {
+      "main": [
+        [
+          {
+            "node": "WHO news RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WHO news RSS": {
+      "main": [
+        [
+          {
+            "node": "Limit newest five",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit newest five": {
+      "main": [
+        [
+          {
+            "node": "Push to EpiSphere",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

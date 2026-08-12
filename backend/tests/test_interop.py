@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.models import Base, Country, Disease, Case
+from app.db.models import Base, Country, DataQualityCheck, Disease, Case, ImportStagedCase, ImportStatus
 from app.schemas.interop_extract import AggregateCaseMetric, DataExtractResponse
 
 def make_session():
@@ -67,8 +67,12 @@ def test_database_interop_data_query():
 import pytest
 from unittest.mock import patch, MagicMock
 from app.services.interop_service import InteropService
-from app.db.models import User, InteropLog
+from app.services.data_upload import DataUploadService
+from app.api.v1.endpoints.interop import receive_webhook
+from app.db.models import User, InteropLog, ImportBatch
 from app.core.config import settings
+from app.core.dependencies import ServicePrincipal
+from app.schemas.interop_extract import WebhookPayload
 
 def test_pull_from_dhis2_mocked_success():
     db = make_session()
@@ -107,14 +111,122 @@ def test_pull_from_dhis2_mocked_success():
         
         assert result["success"] is True
         assert result["records_imported"] == 1
+        assert result["records_staged"] == 1
         
         # Check DB
         cases = db.query(Case).filter(Case.disease_id == disease.id).all()
-        assert len(cases) == 1
-        assert cases[0].daily_cases == 250
+        assert len(cases) == 0
+        batch = db.query(ImportBatch).one()
+        assert batch.status == ImportStatus.VALIDATED
+        assert batch.batch_metadata["mapping_version"] == "dhis2-pull-v1"
+        assert db.query(ImportStagedCase).filter(ImportStagedCase.batch_id == batch.id).count() == 1
+        assert db.query(DataQualityCheck).filter(DataQualityCheck.batch_id == batch.id).count() == 2
         
         # Check Log
         logs = db.query(InteropLog).all()
         assert len(logs) == 1
         assert logs[0].direction.value == "inbound"
         assert logs[0].status.value == "success"
+
+
+def test_webhook_records_schema_compatible_privacy_preserving_log():
+    db = make_session()
+    payload = WebhookPayload(
+        event_type="aggregate_update",
+        source_system="DHIS2",
+        data={"country": "ZMB", "daily_cases": 12},
+    )
+
+    response = receive_webhook(payload, db, ServicePrincipal(name="n8n", auth_method="x-api-key"))
+
+    assert response["status"] == "received"
+    log = db.query(InteropLog).one()
+    assert log.system_name == "DHIS2"
+    assert log.dataset_type == "aggregate_update"
+    assert "payload_hash" in log.details
+    assert "daily_cases" not in log.details
+
+
+def test_webhook_rejects_oversized_payload():
+    with pytest.raises(ValueError, match="1 MB or smaller"):
+        WebhookPayload(
+            event_type="aggregate_update",
+            source_system="DHIS2",
+            data={"blob": "x" * 1_000_001},
+        )
+
+
+def test_dhis2_invalid_period_fails_without_using_today():
+    db = make_session()
+    country = Country(name="Zambia", iso_code="ZMB", iso_code_2="ZM")
+    disease = Disease(name="Malaria", code="B50")
+    user = User(username="admin", email="admin@test.com", hashed_password="pw", role_id=1)
+    db.add_all([country, disease, user])
+    db.commit()
+
+    result = InteropService.pull_from_dhis2(
+        db=db,
+        user=user,
+        dataset_id="ds_123",
+        org_unit="ou_zambia",
+        period="not-a-period",
+        mapping={"de_malaria_1": disease.id},
+        country_id=country.id,
+        dry_run=False,
+    )
+
+    assert result["success"] is False
+    assert "YYYYMM" in result["errors"][0]
+    assert db.query(Case).count() == 0
+    assert db.query(InteropLog).one().status.value == "failure"
+
+
+def test_repeating_dhis2_pull_is_idempotent():
+    db = make_session()
+    country = Country(name="Zambia", iso_code="ZMB", iso_code_2="ZM")
+    disease = Disease(name="Malaria", code="B50")
+    user = User(username="admin", email="admin@test.com", hashed_password="pw", role_id=1)
+    db.add_all([country, disease, user])
+    db.commit()
+    mock_dhis2_response = {"dataValues": [{"dataElement": "de_malaria_1", "value": "250"}]}
+
+    with patch("httpx.get") as mock_get, patch.object(settings, "DHIS2_URL", "https://dhis2.example"):
+        mock_response = MagicMock()
+        mock_response.json.return_value = mock_dhis2_response
+        mock_response.raise_for_status.return_value = None
+        mock_get.return_value = mock_response
+        kwargs = {
+            "db": db,
+            "user": user,
+            "dataset_id": "ds_123",
+            "org_unit": "ou_zambia",
+            "period": "202301",
+            "mapping": {"de_malaria_1": disease.id},
+            "country_id": country.id,
+            "dry_run": False,
+        }
+        first = InteropService.pull_from_dhis2(**kwargs)
+        second = InteropService.pull_from_dhis2(**kwargs)
+
+    assert first["records_imported"] == second["records_imported"] == 1
+    DataUploadService(db).commit_validated_batch(first["batch_id"], user_id=user.id)
+    DataUploadService(db).commit_validated_batch(second["batch_id"], user_id=user.id)
+    assert db.query(Case).count() == 1
+    assert db.query(ImportBatch).count() == 2
+
+
+def test_dhis2_push_replay_returns_previous_success_without_resending():
+    db = make_session()
+    user = User(username="admin", email="admin@test.com", hashed_password="pw", role_id=1)
+    db.add(user)
+    db.commit()
+    response = MagicMock(status_code=201, text="created", headers={"X-Request-ID": "req-1"})
+    response.raise_for_status.return_value = None
+
+    with patch("httpx.post", return_value=response) as mock_post, patch.object(settings, "DHIS2_URL", "https://dhis2.example"):
+        first = InteropService.sync_to_dhis2(db, user, {"dataValues": []}, "aggregate/dataValueSets")
+        second = InteropService.sync_to_dhis2(db, user, {"dataValues": []}, "aggregate/dataValueSets")
+
+    assert first["success"] is True
+    assert second["replayed"] is True
+    assert mock_post.call_count == 1

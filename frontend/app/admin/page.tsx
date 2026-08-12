@@ -19,8 +19,8 @@ interface NewsArticle {
   title: string
   summary: string
   content: string
-  source?: string
-  image_url?: string
+  source?: string | null
+  image_url?: string | null
   is_public: boolean
   published_at: string
 }
@@ -193,7 +193,15 @@ export default function AdminPage() {
         res = await datasetsApi.ingestCsv(csvUrl, parsedMapping, parseInt(datasetDiseaseId), dryRun)
       }
       setDatasetResult(res)
-      toast.success(dryRun ? 'Dataset dry-run parsed successfully!' : 'Dataset ingested successfully!')
+      toast.success(
+        dryRun
+          ? 'Dataset dry-run parsed successfully!'
+          : res.job_id
+            ? `Dataset validation queued as job #${res.job_id}; valid records require administrator approval.`
+            : res.records_staged
+              ? `${res.records_staged} records staged for administrator approval.`
+              : 'Dataset validation completed.'
+      )
     } catch (err: any) {
       toast.error('Dataset ingestion failed')
       setDatasetResult(err.response?.data?.detail || { success: false, errors: ['Request failed'] })
@@ -208,7 +216,13 @@ export default function AdminPage() {
       const parsed = JSON.parse(dhis2Payload)
       const res = await interopApi.syncDHIS2(dhis2Dataset, parsed, dryRun)
       setSyncResult(res)
-      toast.success(dryRun ? 'Dry run completed successfully!' : 'DHIS2 Sync executed!')
+      toast.success(
+        dryRun
+          ? 'Dry run completed successfully!'
+          : res.job_id
+            ? `DHIS2 sync queued as job #${res.job_id}.`
+            : 'DHIS2 Sync executed!'
+      )
       fetchTabContent('interop')
     } catch (err: any) {
       toast.error(err.response?.data?.detail?.message || 'DHIS2 Sync failed')
@@ -221,7 +235,15 @@ export default function AdminPage() {
       const parsedMapping = JSON.parse(pullMapping)
       const res = await interopApi.pullDHIS2(pullDataset, pullOrgUnit, pullPeriod, parsedMapping, parseInt(pullCountryId), dryRun)
       setPullResult(res)
-      toast.success(dryRun ? 'Pull simulated successfully!' : 'Data pulled successfully from DHIS2!')
+      toast.success(
+        dryRun
+          ? 'Pull simulated successfully!'
+          : res.job_id
+            ? `DHIS2 validation queued as job #${res.job_id}; valid records require administrator approval.`
+            : res.records_staged
+              ? `${res.records_staged} DHIS2 records staged for administrator approval.`
+              : 'DHIS2 validation completed.'
+      )
       fetchTabContent('interop')
     } catch (err: any) {
       toast.error(err.response?.data?.detail?.message || 'DHIS2 Pull failed')
@@ -261,6 +283,13 @@ export default function AdminPage() {
             </div>
 
             <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => router.push('/admin/access')}
+                className="text-white hover:bg-white/10"
+              >
+                Access & Sources
+              </Button>
               <Button
                 variant={activeTab === 'news' ? 'primary' : 'ghost'}
                 onClick={() => fetchTabContent('news')}
@@ -385,11 +414,11 @@ export default function AdminPage() {
                 <div>
                   <h3 className="font-bold text-gray-900 dark:text-white text-lg">2. Fetch OWID COVID-19 Data</h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                    Download latest COVID-19 case, death, and recovery numbers from Our World in Data.
+                    Validate the latest OWID data and stage valid rows for administrator approval before cases are updated.
                   </p>
                 </div>
                 <Button variant="primary" className="w-full" onClick={handleTriggerIngest} disabled={ingestLoading}>
-                  <RefreshCw className={`w-4 h-4 mr-2 ${ingestLoading ? 'animate-spin' : ''}`} /> Trigger Data Ingestion
+                  <RefreshCw className={`w-4 h-4 mr-2 ${ingestLoading ? 'animate-spin' : ''}`} /> Queue OWID Validation
                 </Button>
               </Card>
 
@@ -409,8 +438,12 @@ export default function AdminPage() {
                     <span className="font-bold text-emerald-600 dark:text-emerald-400 uppercase">{ingestStatus?.status || 'IDLE'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Processed:</span>
-                    <span>{ingestStatus?.records_processed || 0} records</span>
+                    <span className="text-gray-500">Validated:</span>
+                    <span>{ingestStatus?.result?.records_validated || 0} records</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Staged:</span>
+                    <span>{ingestStatus?.result?.records_staged || 0} records</span>
                   </div>
                 </div>
               </Card>
@@ -422,7 +455,7 @@ export default function AdminPage() {
                     <Database className="w-4 h-4" /> Universal Dataset Ingestor
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 dark:text-white mt-1">Consume Public Datasets</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Pull data from WHO Global Health Observatory or any public CSV URL.</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Pull data from WHO Global Health Observatory or an approved public CSV URL. Valid rows are staged for administrator review before they affect surveillance records.</p>
                 </div>
 
                 <div className="flex gap-4 mb-4">
@@ -476,7 +509,7 @@ export default function AdminPage() {
                     Dry Run Parser
                   </Button>
                   <Button variant="primary" className="flex-1 bg-fuchsia-600 hover:bg-fuchsia-700 border-none text-white" onClick={() => handleDatasetIngest(false)} disabled={datasetLoading}>
-                    Execute Ingestion
+                    Queue Validation
                   </Button>
                 </div>
 
@@ -487,7 +520,13 @@ export default function AdminPage() {
                       {datasetResult.message || 'Execution Result'}
                     </div>
                     {datasetResult.records_imported !== undefined && (
-                      <div className="mt-2 text-xs">Records Imported: {datasetResult.records_imported}</div>
+                      <div className="mt-2 text-xs">Records Validated: {datasetResult.records_imported}</div>
+                    )}
+                    {datasetResult.records_staged !== undefined && datasetResult.records_staged > 0 && (
+                      <div className="mt-1 text-xs">Records Staged for Approval: {datasetResult.records_staged}</div>
+                    )}
+                    {datasetResult.job_id && (
+                      <div className="mt-1 text-xs">Worker Job: #{datasetResult.job_id} — an administrator must approve valid records after review.</div>
                     )}
                     {datasetResult.errors?.length > 0 && (
                       <ul className="mt-2 text-xs list-disc list-inside">
@@ -603,7 +642,7 @@ export default function AdminPage() {
                     Dry Run Fetch
                   </Button>
                   <Button variant="primary" className="flex-1 bg-emerald-600 hover:bg-emerald-700 border-none text-white" onClick={() => handleTestDHIS2Pull(false)}>
-                    Execute Pull
+                    Queue Pull Validation
                   </Button>
                 </div>
 
@@ -614,7 +653,16 @@ export default function AdminPage() {
                       {pullResult.message || 'Execution Result'}
                     </div>
                     {pullResult.records_imported !== undefined && (
-                      <div className="mt-2 text-xs">Records Imported: {pullResult.records_imported}</div>
+                      <div className="mt-2 text-xs">Records Validated: {pullResult.records_imported}</div>
+                    )}
+                    {pullResult.records_staged !== undefined && pullResult.records_staged > 0 && (
+                      <div className="mt-1 text-xs">Records Staged for Approval: {pullResult.records_staged}</div>
+                    )}
+                    {pullResult.batch_id && (
+                      <div className="mt-1 text-xs">Review Batch: #{pullResult.batch_id}</div>
+                    )}
+                    {pullResult.job_id && (
+                      <div className="mt-1 text-xs">Worker Job: #{pullResult.job_id} — an administrator must approve valid records after review.</div>
                     )}
                     {pullResult.errors?.length > 0 && (
                       <ul className="mt-2 text-xs list-disc list-inside">

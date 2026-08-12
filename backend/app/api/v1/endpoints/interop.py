@@ -1,25 +1,73 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+import hashlib
+import json
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, date
 
 from app.api.v1.deps import allow_admin
+from app.core.dependencies import get_interop_agent_or_admin
 from app.core.database import get_db
-from app.db.models import User, InteropLog, Case, Disease, Country, InteropDirection, InteropStatus
+from app.db.models import User, InteropLog, Case, Disease, Country, InteropDirection, InteropStatus, SourceSystem
+from app.schemas.administration import SourceSystemResponse
 from app.schemas.interop import DHIS2SyncRequest, DHIS2SyncResponse, DHIS2PullRequest, DHIS2PullResponse
 from app.schemas.interop_extract import DataExtractResponse, AggregateCaseMetric, WebhookPayload
+from app.schemas.operational import InteropLogResponse
 from app.services.interop_service import InteropService
+from app.services.ingestion_jobs import enqueue_job
 
 router = APIRouter()
+
+
+@router.get("/source-systems", response_model=List[SourceSystemResponse])
+def list_source_systems(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(allow_admin),
+):
+    """List configured source identities and their active state."""
+    return [
+        {
+            "id": source.id,
+            "name": source.name,
+            "code": source.code,
+            "system_type": source.system_type,
+            "owner": source.owner,
+            "is_active": source.is_active,
+        }
+        for source in db.query(SourceSystem).order_by(SourceSystem.name).all()
+    ]
 
 
 @router.post("/dhis2/sync", response_model=DHIS2SyncResponse)
 def trigger_dhis2_sync(
     sync_request: DHIS2SyncRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(allow_admin)
 ):
     """Validate and optionally sync a mapped payload to DHIS2."""
+    if sync_request.enqueue or not sync_request.dry_run:
+        job = enqueue_job(
+            db,
+            job_type="dhis2_sync",
+            payload={
+                "payload": sync_request.payload,
+                "dataset": sync_request.dataset,
+                "mapping_id": sync_request.mapping_id,
+                "dry_run": sync_request.dry_run,
+                "user_id": current_user.id,
+            },
+            created_by=current_user.id,
+        )
+        response.status_code = status.HTTP_202_ACCEPTED
+        return DHIS2SyncResponse(
+            success=True,
+            status="queued",
+            dry_run=sync_request.dry_run,
+            errors=[],
+            message="DHIS2 sync queued for durable worker execution.",
+            job_id=job.id,
+        )
     result = InteropService.sync_to_dhis2(
         db=db,
         user=current_user,
@@ -36,10 +84,37 @@ def trigger_dhis2_sync(
 @router.post("/dhis2/pull", response_model=DHIS2PullResponse)
 def trigger_dhis2_pull(
     pull_request: DHIS2PullRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(allow_admin)
 ):
     """Fetch data from DHIS2 and store it as Cases in EpiSphere."""
+    if pull_request.enqueue or not pull_request.dry_run:
+        job = enqueue_job(
+            db,
+            job_type="dhis2_pull",
+            payload={
+                "dataset_id": pull_request.dataset_id,
+                "org_unit": pull_request.org_unit,
+                "period": pull_request.period,
+                "mapping": pull_request.mapping,
+                "country_id": pull_request.country_id,
+                "dry_run": pull_request.dry_run,
+                "user_id": current_user.id,
+            },
+            created_by=current_user.id,
+        )
+        response.status_code = status.HTTP_202_ACCEPTED
+        return DHIS2PullResponse(
+            success=True,
+            status="queued",
+            records_imported=0,
+            dry_run=pull_request.dry_run,
+            errors=[],
+            message="DHIS2 pull queued for durable worker execution.",
+            job_id=job.id,
+            records_staged=0,
+        )
     result = InteropService.pull_from_dhis2(
         db=db,
         user=current_user,
@@ -55,7 +130,7 @@ def trigger_dhis2_pull(
     return result
 
 
-@router.get("/logs")
+@router.get("/logs", response_model=List[InteropLogResponse])
 def get_interop_logs(
     skip: int = 0,
     limit: int = 50,
@@ -130,19 +205,28 @@ def extract_deidentified_data(
 @router.post("/webhook")
 def receive_webhook(
     payload: WebhookPayload,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    agent_or_admin = Depends(get_interop_agent_or_admin),
 ):
     """
     Receive inbound webhook events from external EHR, LIMS, or DHIS2 systems.
     Logs event into InteropLog audit ledger.
     """
+    payload_hash = hashlib.sha256(
+        json.dumps(payload.data, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    actor = agent_or_admin.name if hasattr(agent_or_admin, "name") else "admin"
     log_entry = InteropLog(
-        target_system=payload.source_system,
+        system_name=payload.source_system[:50],
         direction=InteropDirection.INBOUND,
         status=InteropStatus.SUCCESS,
-        payload_hash=str(hash(str(payload.data))),
-        request_payload=payload.data,
-        response_payload={"received": True, "event": payload.event_type},
+        dataset_type=payload.event_type[:50],
+        details={
+            "event_type": payload.event_type,
+            "payload_hash": payload_hash,
+            "payload_keys": sorted(payload.data.keys()),
+            "received_by": actor,
+        },
         timestamp=datetime.utcnow()
     )
     db.add(log_entry)

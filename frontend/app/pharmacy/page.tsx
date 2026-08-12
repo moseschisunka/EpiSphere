@@ -11,8 +11,8 @@ interface Prescription {
   id: number
   drug_name: string
   quantity: number
-  patient_mrn?: string
-  clinician_name: string
+  patient_mrn?: string | null
+  clinician_name?: string | null
   created_at?: string
 }
 

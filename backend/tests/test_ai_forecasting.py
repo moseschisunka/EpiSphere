@@ -8,6 +8,7 @@ from app.db.models import Base, Country, Disease, Case, Forecast, Alert
 from app.ml.outbreak_detection import OutbreakDetectionEngine
 from app.ml.forecasting import ForecastingPipeline
 from app.services.outbreak_detection_service import OutbreakDetectionService
+from app.services.forecast_service import ForecastService
 
 
 def make_session():
@@ -94,3 +95,40 @@ def test_detection_service_persists_forecast_interval_exceedance_metadata():
     assert alert is not None
     assert alert.detection_metadata is not None
     assert "method_results" in alert.detection_metadata
+
+
+def test_forecast_service_persists_reproducible_input_provenance():
+    db = make_session()
+    country = Country(name="Zambia", iso_code="ZMB", iso_code_2="ZM", population=20_000_000)
+    disease = Disease(name="Cholera", code="A00")
+    db.add_all([country, disease])
+    db.flush()
+
+    start = date.today() - timedelta(days=35)
+    for i in range(35):
+        db.add(Case(
+            country_id=country.id,
+            disease_id=disease.id,
+            date=start + timedelta(days=i),
+            daily_cases=5 + (i % 3),
+            cumulative_cases=5 + (i % 3),
+            source_system_id=None,
+            source_record_id=f"case-{i}",
+        ))
+    db.commit()
+
+    forecast = asyncio.run(ForecastService(db).generate_forecast(country.id, disease.id, horizon_days=3))
+    provenance = forecast.accuracy_metrics["input_provenance"]
+
+    assert provenance["observation_count"] == 35
+    assert len(provenance["case_ids"]) == 35
+    assert provenance["history_start"] == start.isoformat()
+    assert provenance["history_end"] == (start + timedelta(days=34)).isoformat()
+    assert len(provenance["observations_sha256"]) == 64
+    assert forecast.accuracy_metrics["evaluation_context"] == {
+        "country_id": country.id,
+        "disease_id": disease.id,
+        "data_volume_observations": 35,
+        "reporting_completeness": 1.0,
+        "missing_days": 0,
+    }

@@ -1,20 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from datetime import datetime
 
-from app.core.database import get_db, SessionLocal
+from app.core.database import get_db
 from app.core.dependencies import get_current_active_user, require_role
-from app.db.models import User
+from app.db.models import IngestionJob, IngestionJobStatus, User
 from app.services.seed_countries import seed_countries_and_regions
-from app.services.covid_data_service import CovidDataService
+from app.services.ingestion_jobs import enqueue_job
 
 router = APIRouter()
-
-ingest_status = {
-    "status": "idle",
-    "last_run": None,
-    "result": None
-}
 
 @router.post("/seed-countries", status_code=status.HTTP_200_OK)
 async def seed_countries_endpoint(
@@ -28,38 +21,46 @@ async def seed_countries_endpoint(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-async def run_covid_ingest(user_id: int):
-    global ingest_status
-    ingest_status["status"] = "running"
-    db_session = SessionLocal()
-    try:
-        service = CovidDataService(db_session)
-        result = await service.ingest_owid_data(user_id=user_id)
-        ingest_status["status"] = "completed"
-        ingest_status["result"] = result
-    except Exception as e:
-        ingest_status["status"] = "failed"
-        ingest_status["result"] = str(e)
-    finally:
-        ingest_status["last_run"] = datetime.utcnow().isoformat()
-        db_session.close()
-
 @router.post("/ingest", status_code=status.HTTP_202_ACCEPTED)
 async def trigger_covid_ingest(
-    background_tasks: BackgroundTasks,
-    current_user: User = Depends(require_role(["admin", "epidemiologist", "country_data_officer"]))
+    current_user: User = Depends(require_role(["admin", "epidemiologist", "country_data_officer"])),
+    db: Session = Depends(get_db),
 ):
-    """Trigger background ingestion of COVID-19 data from OWID"""
-    global ingest_status
-    if ingest_status["status"] == "running":
-        return {"message": "Ingestion already running"}
-    
-    background_tasks.add_task(run_covid_ingest, current_user.id)
-    return {"message": "COVID-19 data ingestion started"}
+    """Queue durable COVID-19 ingestion for the worker process."""
+    active = db.query(IngestionJob).filter(
+        IngestionJob.job_type == "owid_covid19",
+        IngestionJob.status.in_([
+            IngestionJobStatus.QUEUED,
+            IngestionJobStatus.RUNNING,
+            IngestionJobStatus.CANCEL_REQUESTED,
+        ]),
+    ).first()
+    if active:
+        return {"message": "Ingestion already queued", "job_id": active.id, "status": active.status.value}
+    job = enqueue_job(
+        db,
+        job_type="owid_covid19",
+        payload={"user_id": current_user.id},
+        created_by=current_user.id,
+    )
+    return {"message": "COVID-19 ingestion queued", "job_id": job.id, "status": job.status.value}
 
 @router.get("/status")
 async def get_covid_ingest_status(
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ):
-    """Get the status of the last or ongoing ingestion"""
-    return ingest_status
+    """Get the latest durable COVID-19 ingestion job."""
+    job = db.query(IngestionJob).filter(
+        IngestionJob.job_type == "owid_covid19",
+    ).order_by(IngestionJob.created_at.desc()).first()
+    if not job:
+        return {"status": "idle", "job_id": None, "result": None}
+    return {
+        "status": job.status.value,
+        "job_id": job.id,
+        "attempts": job.attempts,
+        "last_run": job.completed_at,
+        "result": job.result,
+        "error": job.error,
+    }

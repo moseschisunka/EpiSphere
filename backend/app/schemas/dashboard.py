@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from datetime import date
+from datetime import date, datetime
 
 
 class GlobalStats(BaseModel):
@@ -37,6 +37,8 @@ class CountryStats(BaseModel):
     reporting_lag_days: Optional[int] = None
     data_quality_score: Optional[float] = None
     data_freshness_status: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class TimeSeriesPoint(BaseModel):
@@ -61,3 +63,78 @@ class CountryDashboardRequest(BaseModel):
     disease_id: Optional[int] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
+
+
+class CountryDashboardCountry(BaseModel):
+    id: int
+    name: str
+    iso_code: str
+    population: int | None = None
+
+
+class CountryDashboardSeriesPoint(BaseModel):
+    date: date
+    daily_cases: int
+    cumulative_cases: int
+    daily_deaths: int
+    cumulative_deaths: int
+    data_quality_score: float | None = None
+
+
+class CountryDashboardMovingAverage(BaseModel):
+    date: date
+    value: float
+
+
+class CountryDashboardQuality(BaseModel):
+    date_range_start: date
+    date_range_end: date
+    latest_data_date: date | None = None
+    reporting_lag_days: int | None = None
+    completeness: float
+    freshness_status: str
+
+
+class CountryDashboardLatestStats(BaseModel):
+    date: date
+    daily_cases: int
+    cumulative_cases: int
+    daily_deaths: int
+    cumulative_deaths: int
+
+
+class CountryDashboardResponse(BaseModel):
+    country: CountryDashboardCountry
+    time_series: list[CountryDashboardSeriesPoint]
+    moving_averages: list[CountryDashboardMovingAverage]
+    data_quality: CountryDashboardQuality
+    latest_stats: CountryDashboardLatestStats | None = None
+
+
+class OperationsAlertQueueItem(BaseModel):
+    id: int
+    country_id: int
+    country_name: str
+    disease_name: str
+    severity: str
+    status: str
+    triggered_at: datetime
+    assigned_to: int | None = None
+    age_hours: float
+    sla_due: bool
+
+
+class ReportingDelayItem(BaseModel):
+    country_id: int
+    country_name: str
+    latest_data_date: date | None = None
+    reporting_lag_days: int | None = None
+    freshness_status: str
+
+
+class OperationsDashboardResponse(BaseModel):
+    active_alerts: int
+    overdue_alerts: int
+    unassigned_alerts: int
+    alert_queue: list[OperationsAlertQueueItem]
+    reporting_delays: list[ReportingDelayItem]

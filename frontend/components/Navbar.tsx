@@ -31,6 +31,7 @@ const navGroups: NavGroup[] = [
     icon: Activity,
     items: [
       { href: '/dashboard/global', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/operations', label: 'EOC Operations', icon: Activity, roles: ['admin', 'epidemiologist', 'country_data_officer', 'facility_admin'] },
       { href: '/surveillance', label: 'Surveillance', icon: Globe, roles: ['admin', 'epidemiologist'] },
       { href: '/alerts', label: 'Alerts', icon: Bell },
     ],
@@ -228,9 +229,10 @@ export default function Navbar() {
     const checkAuth = async () => {
       try {
         const user = await authApi.getCurrentUser()
-        if (user && user.role) {
+        const role = user.roles?.[0]
+        if (user && role) {
           setIsAuthenticated(true)
-          setUserRole(user.role.name)
+          setUserRole(role)
           setUserName(user.full_name || user.email)
         }
       } catch (e) {

@@ -1,12 +1,13 @@
 """Service for running outbreak detection on case data"""
 
 from typing import List
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
 from app.db.models import Case, Country, Disease, Alert, AlertStatus, AlertSeverity, Forecast
 from app.ml.outbreak_detection import OutbreakDetectionEngine
+from app.core.config import settings
 
 
 class OutbreakDetectionService:
@@ -87,7 +88,7 @@ class OutbreakDetectionService:
                 and_(
                     Alert.country_id == country_id,
                     Alert.disease_id == disease_id,
-                    Alert.triggered_at >= date.today()
+                    Alert.triggered_at >= datetime.utcnow() - timedelta(hours=settings.ALERT_SUPPRESSION_HOURS)
                 )
             ).first()
             

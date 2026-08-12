@@ -7,9 +7,22 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.dependencies import get_current_active_user, require_role
 from app.db.models import AuditAction, AuditLog, Role, User
+from app.schemas.administration import RoleResponse
 from app.schemas.user import UserAdminUpdate, UserResponse, UserRoleUpdate, UserUpdate
 
 router = APIRouter()
+
+
+@router.get("/roles", response_model=List[RoleResponse])
+async def list_roles(
+    current_user: User = Depends(require_role(["admin"])),
+    db: Session = Depends(get_db),
+):
+    """List assignable roles for the administrator access workspace."""
+    return [
+        {"id": role.id, "name": role.name, "description": role.description}
+        for role in db.query(Role).order_by(Role.name).all()
+    ]
 
 
 @router.get("/", response_model=List[UserResponse])

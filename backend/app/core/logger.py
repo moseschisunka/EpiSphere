@@ -13,8 +13,11 @@ class JSONFormatter(logging.Formatter):
             "module": record.module,
             "funcName": record.funcName,
             "lineNo": record.lineno,
-            "environment": settings.ENVIRONMENT
+            "environment": settings.ENVIRONMENT,
         }
+        request_id = getattr(record, "request_id", None)
+        if request_id:
+            log_record["request_id"] = request_id
         
         if record.exc_info:
             log_record["exception"] = self.formatException(record.exc_info)

@@ -6,11 +6,12 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.db.models import Disease
+from app.schemas.operational import DiseaseResponse
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[dict])
+@router.get("/", response_model=List[DiseaseResponse])
 async def list_diseases(
     active_only: bool = True,
     skip: int = 0,
@@ -36,7 +37,7 @@ async def list_diseases(
     ]
 
 
-@router.get("/{disease_id}", response_model=dict)
+@router.get("/{disease_id}", response_model=DiseaseResponse)
 async def get_disease(
     disease_id: int,
     db: Session = Depends(get_db)

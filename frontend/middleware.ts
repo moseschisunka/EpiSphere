@@ -1,8 +1,18 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { rejectCrossSiteMutation } from './lib/server/csrf';
 
 // Add paths that don't require authentication
-const publicPaths = ['/', '/auth/login', '/auth/register', '/browse', '/public/dashboard'];
+const publicPaths = [
+  '/',
+  '/auth/login',
+  '/auth/register',
+  '/auth/mfa',
+  '/auth/verify-email',
+  '/auth/reset-password',
+  '/browse',
+  '/public/dashboard',
+];
 
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
@@ -15,6 +25,10 @@ export function middleware(request: NextRequest) {
 
   // API Proxy: Inject Authorization header and forward to backend
   if (path.startsWith('/api/v1/')) {
+    const csrfFailure = rejectCrossSiteMutation(request);
+    if (csrfFailure) {
+      return csrfFailure;
+    }
     const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
     const apiBaseUrl = rawApiUrl.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
     const destinationPath = path.replace('/api/v1', '');

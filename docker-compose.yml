@@ -3,14 +3,19 @@ version: '3.8'
 services:
   # PostgreSQL with TimescaleDB extension
   postgres:
-    image: timescale/timescaledb:latest-pg15
+    image: ${POSTGRES_IMAGE:-timescale/timescaledb:2.17.2-pg15}
     container_name: episphere_postgres
+    cpus: ${POSTGRES_CPUS:-1.0}
+    mem_limit: ${POSTGRES_MEMORY_LIMIT:-1g}
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-episphere}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-episphere_password}
       POSTGRES_DB: ${POSTGRES_DB:-episphere_db}
     ports:
-      - "5432:5432"
+      # Keep data stores private to the host by default. Containers use the
+      # internal Compose network; remote administration needs an explicit,
+      # separately secured path.
+      - "${POSTGRES_PORT_BIND:-127.0.0.1:5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -21,10 +26,12 @@ services:
 
   # Redis for caching and background jobs
   redis:
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE:-redis:7.2.5-alpine}
     container_name: episphere_redis
+    cpus: ${REDIS_CPUS:-0.5}
+    mem_limit: ${REDIS_MEMORY_LIMIT:-256m}
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT_BIND:-127.0.0.1:6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -39,14 +46,52 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: episphere_backend
+    cpus: ${BACKEND_CPUS:-1.0}
+    mem_limit: ${BACKEND_MEMORY_LIMIT:-1g}
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-episphere}:${POSTGRES_PASSWORD:-episphere_password}@postgres:5432/${POSTGRES_DB:-episphere_db}
+      TIMESCALEDB_ENABLED: ${TIMESCALEDB_ENABLED:-true}
       REDIS_URL: redis://redis:6379/0
+      REDIS_REQUIRED: ${REDIS_REQUIRED:-false}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
       SECRET_KEY: ${SECRET_KEY:-change-this-in-development}
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      AUTH_TOKEN_EXPIRE_MINUTES: ${AUTH_TOKEN_EXPIRE_MINUTES:-30}
+      MFA_CHALLENGE_EXPIRE_MINUTES: ${MFA_CHALLENGE_EXPIRE_MINUTES:-5}
+      EMAIL_VERIFICATION_REQUIRED: ${EMAIL_VERIFICATION_REQUIRED:-false}
+      MFA_REQUIRED_FOR_PRIVILEGED: ${MFA_REQUIRED_FOR_PRIVILEGED:-false}
       CORS_ORIGINS: http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001
       AGENT_API_KEY: ${AGENT_API_KEY:-}
+      NEWS_AGENT_API_KEY: ${NEWS_AGENT_API_KEY:-}
+      DATASET_AGENT_API_KEY: ${DATASET_AGENT_API_KEY:-}
+      INTEROP_AGENT_API_KEY: ${INTEROP_AGENT_API_KEY:-}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-}
+      PUBLIC_DISCLOSURE_THRESHOLD: ${PUBLIC_DISCLOSURE_THRESHOLD:-5}
+      SECURITY_TOKEN_RETENTION_DAYS: ${SECURITY_TOKEN_RETENTION_DAYS:-1}
+      NOTIFICATION_RETENTION_DAYS: ${NOTIFICATION_RETENTION_DAYS:-180}
+      WORKER_STALE_AFTER_MINUTES: ${WORKER_STALE_AFTER_MINUTES:-15}
+      WORKER_HEARTBEAT_MAX_AGE_SECONDS: ${WORKER_HEARTBEAT_MAX_AGE_SECONDS:-45}
+      WORKER_HEARTBEAT_REQUIRED: ${WORKER_HEARTBEAT_REQUIRED:-true}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@episphere.ai}
+      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-local}
+      LOCAL_OBJECT_STORAGE_DIR: ${LOCAL_OBJECT_STORAGE_DIR:-object_storage}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-}
+      OBJECT_STORAGE_ENDPOINT_URL: ${OBJECT_STORAGE_ENDPOINT_URL:-}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:-}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:-}
+      OBJECT_STORAGE_SERVER_SIDE_ENCRYPTION: ${OBJECT_STORAGE_SERVER_SIDE_ENCRYPTION:-AES256}
+      REPORT_OBJECT_PREFIX: ${REPORT_OBJECT_PREFIX:-reports}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/live')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     ports:
       - "8000:8000"
     volumes:
@@ -57,26 +102,47 @@ services:
       redis:
         condition: service_healthy
 
+  # Durable ingestion worker. External schedulers enqueue jobs through the API;
+  # this process owns retries and dead-letter transitions.
+  ingestion-worker:
+    extends:
+      service: backend
+    container_name: episphere_ingestion_worker
+    cpus: ${INGESTION_WORKER_CPUS:-1.0}
+    mem_limit: ${INGESTION_WORKER_MEMORY_LIMIT:-1g}
+    entrypoint: ["python", "-m", "scripts.run_ingestion_worker"]
+    command: ["--poll-seconds", "10"]
+    ports: []
+    healthcheck:
+      disable: true
+
   # Next.js Frontend
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: episphere_frontend
+    cpus: ${FRONTEND_CPUS:-0.5}
+    mem_limit: ${FRONTEND_MEMORY_LIMIT:-512m}
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:
       - "3000:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
   # n8n Orchestrator for automated scraping
   n8n:
-    image: n8nio/n8n
+    image: ${N8N_IMAGE:-n8nio/n8n:1.88.0}
     container_name: episphere_n8n
+    cpus: ${N8N_CPUS:-0.5}
+    mem_limit: ${N8N_MEMORY_LIMIT:-512m}
     restart: always
     ports:
-      - "5678:5678"
+      # Keep the editor private by default. Production access should terminate
+      # at an authenticated TLS reverse proxy, not on a public Docker port.
+      - "${N8N_PORT_BIND:-127.0.0.1:5678}:5678"
     environment:
       - N8N_HOST=localhost
       - N8N_PORT=5678
@@ -85,10 +151,21 @@ services:
       - WEBHOOK_URL=http://localhost:5678/
       - GENERIC_TIMEZONE=Africa/Lusaka
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:-}
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=none
+      - EXECUTIONS_DATA_SAVE_ON_PROGRESS=false
+      - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=false
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=${N8N_EXECUTIONS_DATA_MAX_AGE:-168}
+      - EXECUTIONS_DATA_PRUNE_MAX_COUNT=${N8N_EXECUTIONS_DATA_PRUNE_MAX_COUNT:-50000}
+      - N8N_CONCURRENCY_PRODUCTION_LIMIT=${N8N_CONCURRENCY_PRODUCTION_LIMIT:-2}
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=true
+      - NODES_EXCLUDE=["n8n-nodes-base.executeCommand","n8n-nodes-base.localFileTrigger","n8n-nodes-base.readWriteFile","n8n-nodes-base.ssh"]
     volumes:
       - n8n_data:/home/node/.n8n
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   postgres_data:

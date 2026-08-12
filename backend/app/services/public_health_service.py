@@ -2,12 +2,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Dict, Any
 from app.db.models import Facility, Encounter, Case, Alert, AlertSeverity
+from app.core.config import settings
 
 class PublicHealthService:
     
     @staticmethod
-    def _privacy_filter(count: int, threshold: int = 5) -> Any:
+    def _privacy_filter(count: int, threshold: int | None = None) -> Any:
         """Suppress small counts"""
+        threshold = settings.PUBLIC_DISCLOSURE_THRESHOLD if threshold is None else threshold
         if count < threshold:
             return 0 # Or "Low" if returning string
         return count
@@ -40,7 +42,10 @@ class PublicHealthService:
          .all()
          
         return [
-            {"province": r.province, "visit_count": r.count}
+            {
+                "province": r.province,
+                "visit_count": PublicHealthService._privacy_filter(r.count),
+            }
             for r in results
         ]
 

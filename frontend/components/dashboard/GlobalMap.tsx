@@ -9,8 +9,8 @@ interface GlobalMapProps {
     country_name: string
     iso_code: string
     total_cases: number
-    latitude?: number
-    longitude?: number
+    latitude?: number | null
+    longitude?: number | null
   }>
 }
 
@@ -41,7 +41,7 @@ export default function GlobalMap({ countryStats }: GlobalMapProps) {
           className="map-tiles"
         />
         {countryStats.map((country) => {
-          if (country.latitude === undefined || country.longitude === undefined) return null
+          if (country.latitude == null || country.longitude == null) return null
           
           return (
             <CircleMarker

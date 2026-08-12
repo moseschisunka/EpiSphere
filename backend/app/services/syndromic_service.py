@@ -12,6 +12,12 @@ class SyndromicService:
         "Gastrointestinal": ["diarrhea", "vomiting", "nausea", "abdominal pain"],
         "Neurological": ["seizure", "confusion", "stiff neck", "paralysis"]
     }
+    SYNDROME_KEYS = {
+        "Febrile Illness": "febrile_illness",
+        "Acute Respiratory": "acute_respiratory",
+        "Gastrointestinal": "gastrointestinal",
+        "Neurological": "neurological",
+    }
 
     @staticmethod
     def analyze_encounter(encounter: Encounter) -> List[str]:
@@ -50,15 +56,22 @@ class SyndromicService:
         return totals
 
     @staticmethod
-    def get_national_trends(db: Session, days: int = 7) -> List[Dict[str, Any]]:
-        """Get daily national totals for last N days"""
+    def get_national_trends(
+        db: Session,
+        days: int = 7,
+        facility_id: int | None = None,
+    ) -> List[Dict[str, Any]]:
+        """Get daily totals, optionally constrained to one facility."""
         end_date = date.today()
         start_date = end_date - timedelta(days=days)
         
         # This is inefficient for large datasets (fetching all encounters). 
         # In production, we'd use a materialised view or daily summary table.
         # For prototype, we'll iterate.
-        encounters = db.query(Encounter).filter(Encounter.date >= start_date).all()
+        query = db.query(Encounter).filter(Encounter.date >= start_date)
+        if facility_id is not None:
+            query = query.filter(Encounter.facility_id == facility_id)
+        encounters = query.all()
         
         # Structure: {date: {syndrome: count}}
         daily_stats = {}
@@ -78,7 +91,10 @@ class SyndromicService:
         while current <= end_date:
             d_key = current.isoformat()
             stats = daily_stats.get(d_key, {s: 0 for s in SyndromicService.SYNDROME_DEFINITIONS.keys()})
-            result.append({"date": d_key, **stats})
+            result.append({
+                "date": d_key,
+                **{SyndromicService.SYNDROME_KEYS[name]: count for name, count in stats.items()},
+            })
             current += timedelta(days=1)
             
         return result

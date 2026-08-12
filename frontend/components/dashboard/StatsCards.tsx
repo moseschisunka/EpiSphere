@@ -1,13 +1,17 @@
 'use client'
 
-import { Activity, Skull, Bell, Globe, TrendingUp, TrendingDown } from 'lucide-react'
+import { Activity, Skull, Bell, Globe } from 'lucide-react'
 
 interface StatsCardsProps {
-  stats: any
-  alerts: any
+  stats: {
+    total_cases?: number
+    total_deaths?: number
+    active_alerts?: number
+    total_countries?: number
+  }
 }
 
-export default function StatsCards({ stats, alerts }: StatsCardsProps) {
+export default function StatsCards({ stats }: StatsCardsProps) {
   const cards = [
     {
       title: 'Total Cases',
@@ -15,8 +19,7 @@ export default function StatsCards({ stats, alerts }: StatsCardsProps) {
       icon: Activity,
       color: 'bg-blue-500',
       borderColor: 'border-l-blue-500',
-      delta: '+5.2%',
-      isPositive: false
+      description: 'Latest cumulative total'
     },
     {
       title: 'Total Deaths',
@@ -24,26 +27,23 @@ export default function StatsCards({ stats, alerts }: StatsCardsProps) {
       icon: Skull,
       color: 'bg-red-500',
       borderColor: 'border-l-red-500',
-      delta: '+1.1%',
-      isPositive: false
+      description: 'Latest cumulative total'
     },
     {
       title: 'Active Alerts',
-      value: alerts?.length?.toLocaleString() || '0',
+      value: stats?.active_alerts?.toLocaleString() || '0',
       icon: Bell,
       color: 'bg-amber-500',
       borderColor: 'border-l-amber-500',
-      delta: '-2.4%',
-      isPositive: true
+      description: 'Triggered or under investigation'
     },
     {
       title: 'Affected Countries',
-      value: stats?.affected_countries?.toLocaleString() || '0',
+      value: stats?.total_countries?.toLocaleString() || '0',
       icon: Globe,
       color: 'bg-indigo-500',
       borderColor: 'border-l-indigo-500',
-      delta: '0%',
-      isPositive: true
+      description: 'With reported surveillance data'
     }
   ]
 
@@ -64,11 +64,8 @@ export default function StatsCards({ stats, alerts }: StatsCardsProps) {
             <div className="text-3xl font-bold text-slate-900 dark:text-white">
               {card.value}
             </div>
-            <div className={`flex items-center text-sm font-medium ${card.isPositive ? 'text-emerald-500' : 'text-red-500'}`}>
-              {card.isPositive ? <TrendingDown className="w-4 h-4 mr-1" /> : <TrendingUp className="w-4 h-4 mr-1" />}
-              {card.delta}
-            </div>
           </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">{card.description}</p>
         </div>
       ))}
     </div>

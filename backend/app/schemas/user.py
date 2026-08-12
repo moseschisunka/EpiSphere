@@ -1,6 +1,6 @@
 ﻿"""User schemas"""
 
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, Field
 from typing import Optional
 from datetime import datetime
 
@@ -44,6 +44,8 @@ class UserResponse(UserBase):
     facility_id: Optional[int] = None
     is_active: bool
     is_verified: bool
+    mfa_enabled: bool = False
+    roles: list[str] = []
     created_at: datetime
     last_login: Optional[datetime] = None
 
@@ -56,10 +58,39 @@ class UserLogin(BaseModel):
 
 
 class Token(BaseModel):
-    access_token: str
+    access_token: Optional[str] = None
     token_type: str = "bearer"
+    mfa_required: bool = False
+    mfa_challenge_token: Optional[str] = None
 
 
 class TokenData(BaseModel):
     user_id: Optional[int] = None
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    password: str = Field(..., min_length=8)
+
+
+class MfaCodeRequest(BaseModel):
+    code: str
+
+
+class MfaVerifyRequest(BaseModel):
+    challenge_token: str
+    code: str
+
+
+class MfaSetupResponse(BaseModel):
+    secret: str
+    otpauth_uri: str
 
