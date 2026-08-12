@@ -2524,6 +2524,13 @@ export interface components {
             /** Id */
             id: number;
         };
+        /** FacilityConsentResponse */
+        FacilityConsentResponse: {
+            /** Status */
+            status: string;
+            /** Public Visible */
+            public_visible: boolean;
+        };
         /** FacilityCreate */
         FacilityCreate: {
             /** Name */
@@ -4880,7 +4887,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["FacilityConsentResponse"];
                 };
             };
             /** @description Validation Error */

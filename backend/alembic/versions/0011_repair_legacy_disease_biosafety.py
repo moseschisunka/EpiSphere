@@ -1,6 +1,6 @@
 """Repair the legacy SQLite disease table created before the migration ledger.
 
-Revision ID: 0011_repair_legacy_disease_biosafety
+Revision ID: 0011_legacy_disease_bsl
 Revises: 0010_worker_heartbeats
 Create Date: 2026-08-12
 """
@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0011_repair_legacy_disease_biosafety"
+revision = "0011_legacy_disease_bsl"
 down_revision = "0010_worker_heartbeats"
 branch_labels = None
 depends_on = None

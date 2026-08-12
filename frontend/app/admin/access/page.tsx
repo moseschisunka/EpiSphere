@@ -6,24 +6,14 @@ import { ArrowLeft, Building2, Loader2, Save, ShieldCheck, Users } from 'lucide-
 import { toast } from 'sonner'
 
 import { authApi, facilitiesApi, interopApi, usersApi } from '@/lib/api'
+import type { ApiSchemas, CurrentUser, Facility } from '@/lib/api-contract'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 
-type UserRecord = {
-  id: number
-  username: string
-  email: string
-  full_name?: string | null
-  role_id: number
-  country_id?: number | null
-  facility_id?: number | null
-  is_active: boolean
-  is_verified: boolean
-}
-
-type RoleRecord = { id: number; name: string; description?: string | null }
-type FacilityRecord = { id: number; name: string; country_id: number; public_visible: boolean }
-type SourceRecord = { id: number; name: string; code: string; system_type: string; owner?: string | null; is_active: boolean }
+type UserRecord = CurrentUser
+type RoleRecord = ApiSchemas['RoleResponse']
+type FacilityRecord = Facility
+type SourceRecord = ApiSchemas['SourceSystemResponse']
 
 export default function AdminAccessPage() {
   const router = useRouter()

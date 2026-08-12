@@ -158,3 +158,8 @@ class FacilityHeatmapPointResponse(BaseModel):
     lat: float
     lon: float
     count: int
+
+
+class FacilityConsentResponse(BaseModel):
+    status: str
+    public_visible: bool

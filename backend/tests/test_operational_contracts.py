@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from app.schemas.operational import (
     CountryResponse,
+    FacilityConsentResponse,
     ImportBatchDetailResponse,
     IngestionJobResponse,
     SyndromicTrendResponse,
@@ -42,6 +43,7 @@ def test_reference_and_ingestion_contracts_validate_serialized_endpoint_shapes()
     assert country.iso_code == "ZMB"
     assert batch.metadata["mapping_version"] == "v1"
     assert job.result == {"batch_id": 9}
+    assert FacilityConsentResponse(status="success", public_visible=True).public_visible
 
 
 def test_syndromic_trends_use_stable_machine_readable_keys():

@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.core.dependencies import apply_facility_scope, enforce_facility_scope, require_role
 from app.db.models import User, Facility
 from app.schemas import facility as schemas
+from app.schemas.operational import FacilityConsentResponse
 from app.schemas.user import UserResponse
 
 router = APIRouter()
@@ -62,7 +63,7 @@ def get_facility(
         raise HTTPException(status_code=404, detail="Facility not found")
     return facility
 
-@router.put("/{facility_id}/consent")
+@router.put("/{facility_id}/consent", response_model=FacilityConsentResponse)
 def update_facility_consent(
     facility_id: int,
     public_visible: bool,

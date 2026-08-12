@@ -2,33 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { authApi, facilitiesApi } from '@/lib/api'
-
-interface Facility {
-    id: number
-    name: string
-    type: string
-    country_id: number
-    location?: string | null
-    province?: string | null
-    district?: string | null
-    public_visible: boolean
-}
-
-interface StaffMember {
-    id: number
-    username: string
-    email: string
-    full_name?: string | null
-    role_id: number
-    is_active: boolean
-    is_verified: boolean
-    mfa_enabled: boolean
-}
+import type { Facility, FacilityStaff } from '@/lib/api-contract'
 
 export default function FacilityAdmin() {
     const [facilities, setFacilities] = useState<Facility[]>([])
     const [selectedId, setSelectedId] = useState<number | null>(null)
-    const [staff, setStaff] = useState<StaffMember[]>([])
+    const [staff, setStaff] = useState<FacilityStaff[]>([])
     const [loading, setLoading] = useState(true)
     const [savingConsent, setSavingConsent] = useState(false)
     const [error, setError] = useState<string | null>(null)
