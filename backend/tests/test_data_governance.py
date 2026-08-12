@@ -5,7 +5,7 @@ from fastapi import UploadFile
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.models import Base, Country, Disease, Role, User, DHIS2Mapping, InteropLog, ImportBatch, Case
+from app.db.models import Base, Country, Disease, Role, User, DHIS2Mapping, InteropLog, ImportBatch, ImportStagedCase, Case, ImportStatus
 from app.services.data_upload import DataUploadService
 from app.services.interop_service import InteropService
 
@@ -56,7 +56,31 @@ def test_upload_validate_only_creates_batch_without_cases():
     assert result["committed"] is False
     assert result["rows_valid"] == 1
     assert db.query(ImportBatch).count() == 1
+    assert db.query(ImportStagedCase).count() == 1
     assert db.query(Case).count() == 0
+
+
+def test_validated_upload_can_be_explicitly_approved_and_committed():
+    db = make_session()
+    country, disease, user = seed_core(db)
+    service = DataUploadService(db)
+    file = upload_file_from_text(
+        "reviewed-cholera.csv",
+        "date,daily_cases,cumulative_cases,confirmation_status\n"
+        "2026-07-02,8,8,confirmed\n",
+    )
+
+    validation = asyncio.run(service.upload_file(file, country.id, disease.id, user.id, commit=False))
+    committed = service.commit_validated_batch(validation["batch_id"], user.id)
+    batch = db.query(ImportBatch).filter(ImportBatch.id == validation["batch_id"]).one()
+
+    assert validation["status"] == ImportStatus.VALIDATED.value
+    assert committed["committed"] is True
+    assert committed["rows_committed"] == 1
+    assert batch.status == ImportStatus.COMMITTED
+    assert batch.batch_metadata["committed_by"] == user.id
+    assert db.query(Case).count() == 1
+    assert db.query(ImportStagedCase).count() == 1
 
 
 def test_upload_rejects_invalid_rows_and_records_errors():

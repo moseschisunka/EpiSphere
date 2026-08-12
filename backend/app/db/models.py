@@ -533,12 +533,32 @@ class ImportBatch(Base):
     uploader = relationship("User")
     row_errors = relationship("ImportRowError", back_populates="batch", cascade="all, delete-orphan")
     quality_checks = relationship("DataQualityCheck", back_populates="batch", cascade="all, delete-orphan")
+    staged_cases = relationship("ImportStagedCase", back_populates="batch", cascade="all, delete-orphan")
     cases = relationship("Case", back_populates="import_batch")
     jobs = relationship("IngestionJob", back_populates="import_batch")
 
     __table_args__ = (
         Index("idx_import_batch_status_uploaded", "status", "uploaded_at"),
         Index("idx_import_batch_scope", "country_id", "disease_id", "dataset_type"),
+    )
+
+
+class ImportStagedCase(Base):
+    """Validated case payload held for a data-officer approval decision."""
+
+    __tablename__ = "import_staged_cases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    batch_id = Column(Integer, ForeignKey("import_batches.id"), nullable=False, index=True)
+    row_number = Column(Integer, nullable=False)
+    payload = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    batch = relationship("ImportBatch", back_populates="staged_cases")
+
+    __table_args__ = (
+        UniqueConstraint("batch_id", "row_number", name="uq_import_staged_case_batch_row"),
+        Index("idx_import_staged_case_batch", "batch_id"),
     )
 
 

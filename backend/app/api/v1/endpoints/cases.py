@@ -205,6 +205,21 @@ async def get_import_batch(
     }
 
 
+@router.post("/imports/{batch_id}/commit", response_model=CaseUploadResult)
+async def commit_validated_import_batch(
+    batch_id: int,
+    current_user: User = Depends(require_role(["country_data_officer", "admin", "epidemiologist"])),
+    db: Session = Depends(get_db),
+):
+    """Commit a previously validated upload after the officer has reviewed its issues and checks."""
+    batch = db.query(ImportBatch).filter(ImportBatch.id == batch_id).first()
+    if not batch:
+        raise HTTPException(status_code=404, detail="Import batch not found")
+    if batch.country_id is not None:
+        enforce_country_scope(current_user, batch.country_id)
+    return DataUploadService(db).commit_validated_batch(batch_id=batch_id, user_id=current_user.id)
+
+
 @router.get("/stats", response_model=List[CaseStats])
 async def get_case_stats(
     country_id: Optional[int] = None,

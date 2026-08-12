@@ -133,6 +133,10 @@ export const casesApi = {
     })
     return response.data
   },
+  commitImport: async (batchId: number) => {
+    const response = await api.post<UploadResult>(`/cases/imports/${batchId}/commit`)
+    return response.data
+  },
   getStats: async (params?: ApiQuery<operations['get_case_stats_api_v1_cases_stats_get']>) => {
     const response = await api.get<ApiResponse<operations['get_case_stats_api_v1_cases_stats_get']>>('/cases/stats', { params })
     return response.data

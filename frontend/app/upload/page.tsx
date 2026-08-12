@@ -6,17 +6,20 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Upload, File as FileIcon, X, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import clsx from 'clsx'
+import type { Country, Disease, UploadResult } from '@/lib/api-contract'
 
 export default function UploadPage() {
   const router = useRouter()
   const [file, setFile] = useState<File | null>(null)
   const [countryId, setCountryId] = useState<number | ''>('')
   const [diseaseId, setDiseaseId] = useState<number | ''>('')
-  const [countries, setCountries] = useState<any[]>([])
-  const [diseases, setDiseases] = useState<any[]>([])
+  const [countries, setCountries] = useState<Country[]>([])
+  const [diseases, setDiseases] = useState<Disease[]>([])
   const [uploading, setUploading] = useState(false)
   const [commit, setCommit] = useState(true)
-  const [result, setResult] = useState<any>(null)
+  const [result, setResult] = useState<UploadResult | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [committingBatch, setCommittingBatch] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -102,6 +105,7 @@ export default function UploadPage() {
 
     setUploading(true)
     setResult(null)
+    setUploadError(null)
 
     try {
       const response = await casesApi.upload(file, Number(countryId), Number(diseaseId), commit)
@@ -118,12 +122,23 @@ export default function UploadPage() {
     } catch (error: any) {
       const msg = error.response?.data?.detail || 'Upload failed'
       toast.error(msg)
-      setResult({
-        success: false,
-        message: msg,
-      })
+      setUploadError(msg)
     } finally {
       setUploading(false)
+    }
+  }
+
+  const commitApprovedBatch = async () => {
+    if (!result?.batch_id) return
+    setCommittingBatch(true)
+    try {
+      const response = await casesApi.commitImport(result.batch_id)
+      setResult(response)
+      toast.success(`${response.rows_committed} validated case records committed.`)
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Unable to commit the reviewed batch')
+    } finally {
+      setCommittingBatch(false)
     }
   }
 
@@ -286,6 +301,8 @@ export default function UploadPage() {
         </div>
       </form>
 
+      {uploadError && <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/10 dark:text-red-300">{uploadError}</div>}
+
       {result && (
         <div className={clsx(
           "mt-6 p-6 rounded-xl border animate-in fade-in slide-in-from-bottom-4 duration-300",
@@ -312,6 +329,16 @@ export default function UploadPage() {
                 <div className="mt-3 inline-block px-3 py-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-md text-sm text-gray-600 dark:text-gray-400">
                   Batch #{result.batch_id} • Quality score: <span className="font-semibold text-gray-900 dark:text-white">{result.quality_score ?? 'n/a'}</span> • <span className="font-semibold text-gray-900 dark:text-white">{result.rows_valid ?? 0}/{result.rows_total ?? 0}</span> valid rows
                 </div>
+              )}
+              {result.success && result.status === 'validated' && result.batch_id && (
+                <button
+                  type="button"
+                  onClick={commitApprovedBatch}
+                  disabled={committingBatch}
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {committingBatch ? <><Loader2 className="h-4 w-4 animate-spin" /> Committing approved batch…</> : 'Commit approved records'}
+                </button>
               )}
             </div>
           </div>
