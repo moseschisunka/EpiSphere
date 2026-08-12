@@ -156,6 +156,18 @@ export const facilitiesApi = {
     const response = await api.get('/facilities')
     return response.data
   },
+  get: async (facilityId: number) => {
+    const response = await api.get(`/facilities/${facilityId}`)
+    return response.data
+  },
+  staff: async (facilityId: number) => {
+    const response = await api.get(`/facilities/${facilityId}/staff`)
+    return response.data
+  },
+  updateConsent: async (facilityId: number, publicVisible: boolean) => {
+    const response = await api.put(`/facilities/${facilityId}/consent`, null, { params: { public_visible: publicVisible } })
+    return response.data
+  },
   create: async (data: any) => {
     const response = await api.post('/facilities', data)
     return response.data

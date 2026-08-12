@@ -15,6 +15,7 @@ class FacilityBase(BaseModel):
     admin1_code: Optional[str] = None
     admin2_code: Optional[str] = None
     parent_id: Optional[int] = None
+    public_visible: bool = False
 
 class FacilityCreate(FacilityBase):
     pass

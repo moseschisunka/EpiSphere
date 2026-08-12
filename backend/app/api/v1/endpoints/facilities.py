@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.core.dependencies import apply_facility_scope, enforce_facility_scope, require_role
 from app.db.models import User, Facility
 from app.schemas import facility as schemas
+from app.schemas.user import UserResponse
 
 router = APIRouter()
 
@@ -33,6 +34,20 @@ def list_facilities(
     """List only facilities within the administrator's authorized scope."""
     query = apply_facility_scope(db.query(Facility), Facility, current_user)
     return query.offset(skip).limit(min(limit, 100)).all()
+
+
+@router.get("/{facility_id}/staff", response_model=List[UserResponse])
+def list_facility_staff(
+    facility_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(["admin", "facility_admin"])),
+):
+    """List staff assigned to an authorized facility without exposing passwords."""
+    enforce_facility_scope(current_user, facility_id)
+    facility = db.query(Facility).filter(Facility.id == facility_id).first()
+    if not facility:
+        raise HTTPException(status_code=404, detail="Facility not found")
+    return db.query(User).filter(User.facility_id == facility_id).order_by(User.full_name, User.username).all()
 
 @router.get("/{facility_id}", response_model=schemas.Facility)
 def get_facility(

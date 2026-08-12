@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     ]
     PUBLIC_DATASET_MAX_ROWS: int = 100_000
     PUBLIC_DATASET_MAX_REDIRECTS: int = 3
+    PUBLIC_DISCLOSURE_THRESHOLD: int = 5
 
     # Interoperability
     DHIS2_URL: str = ""
