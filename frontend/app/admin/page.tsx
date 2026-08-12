@@ -414,11 +414,11 @@ export default function AdminPage() {
                 <div>
                   <h3 className="font-bold text-gray-900 dark:text-white text-lg">2. Fetch OWID COVID-19 Data</h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                    Download latest COVID-19 case, death, and recovery numbers from Our World in Data.
+                    Validate the latest OWID data and stage valid rows for administrator approval before cases are updated.
                   </p>
                 </div>
                 <Button variant="primary" className="w-full" onClick={handleTriggerIngest} disabled={ingestLoading}>
-                  <RefreshCw className={`w-4 h-4 mr-2 ${ingestLoading ? 'animate-spin' : ''}`} /> Trigger Data Ingestion
+                  <RefreshCw className={`w-4 h-4 mr-2 ${ingestLoading ? 'animate-spin' : ''}`} /> Queue OWID Validation
                 </Button>
               </Card>
 
@@ -438,8 +438,12 @@ export default function AdminPage() {
                     <span className="font-bold text-emerald-600 dark:text-emerald-400 uppercase">{ingestStatus?.status || 'IDLE'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Processed:</span>
-                    <span>{ingestStatus?.records_processed || 0} records</span>
+                    <span className="text-gray-500">Validated:</span>
+                    <span>{ingestStatus?.result?.records_validated || 0} records</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Staged:</span>
+                    <span>{ingestStatus?.result?.records_staged || 0} records</span>
                   </div>
                 </div>
               </Card>
