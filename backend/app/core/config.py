@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     # Database (defaults to SQLite for local development)
     DATABASE_URL: str = "sqlite:///./episphere.db"
+    TIMESCALEDB_ENABLED: bool = True
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"

@@ -69,6 +69,7 @@ jobs:
       - name: Run PostgreSQL migration smoke test
         env:
           DATABASE_URL: postgresql://episphere:episphere@localhost:5432/episphere_ci
+          TIMESCALEDB_ENABLED: "false"
         run: alembic upgrade head
 
   frontend:

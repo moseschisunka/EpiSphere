@@ -41,6 +41,7 @@ services:
     container_name: episphere_backend
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-episphere}:${POSTGRES_PASSWORD:-episphere_password}@postgres:5432/${POSTGRES_DB:-episphere_db}
+      TIMESCALEDB_ENABLED: ${TIMESCALEDB_ENABLED:-true}
       REDIS_URL: redis://redis:6379/0
       REDIS_REQUIRED: ${REDIS_REQUIRED:-false}
       ENVIRONMENT: ${ENVIRONMENT:-development}

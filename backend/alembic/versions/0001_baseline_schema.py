@@ -8,6 +8,7 @@ Create Date: 2026-07-02
 from alembic import op
 
 from app.db.models import Base
+from app.core.config import settings
 
 # revision identifiers, used by Alembic.
 revision = "0001_baseline_schema"
@@ -20,7 +21,7 @@ def upgrade() -> None:
     bind = op.get_bind()
     Base.metadata.create_all(bind=bind)
 
-    if bind.dialect.name == "postgresql":
+    if bind.dialect.name == "postgresql" and settings.TIMESCALEDB_ENABLED:
         op.execute("CREATE EXTENSION IF NOT EXISTS timescaledb")
         op.execute(
             "SELECT create_hypertable('cases', 'date', if_not_exists => TRUE, migrate_data => TRUE)"
