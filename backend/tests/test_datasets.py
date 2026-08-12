@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.db.models import Base
 from app.services.public_dataset_service import PublicDatasetService
-from app.db.models import Country, Disease, Case
+from app.db.models import Country, Disease, Case, ImportBatch, SourceSystem, ImportStatus
 
 @pytest.fixture
 def make_session():
@@ -58,6 +58,13 @@ UNKNOWN,2023-01-03,10,0
         assert cases[0].daily_cases == 50
         assert cases[1].daily_cases == 30
 
+        batch = db.query(ImportBatch).one()
+        assert batch.status == ImportStatus.COMMITTED
+        assert batch.rows_total == 3
+        assert batch.rows_valid == 2
+        assert batch.source_system_id == db.query(SourceSystem).one().id
+        assert all(case.import_batch_id == batch.id for case in cases)
+
 def test_ingest_who_gho_success(make_session):
     db = make_session
     
@@ -93,3 +100,17 @@ def test_ingest_who_gho_success(make_session):
         cases = db.query(Case).filter(Case.disease_id == disease.id).all()
         assert len(cases) == 2
         assert cases[0].daily_cases == 1000
+        batch = db.query(ImportBatch).one()
+        assert batch.status == ImportStatus.COMMITTED
+        assert batch.batch_metadata["indicator_code"] == "CHOLERA_TEST"
+
+
+def test_ingest_csv_requires_core_mapping(make_session):
+    with pytest.raises(ValueError, match="missing required keys"):
+        PublicDatasetService.ingest_csv_url(
+            db=make_session,
+            url="http://test.com/data.csv",
+            mapping={"country_iso": "Country"},
+            disease_id=1,
+            dry_run=True,
+        )

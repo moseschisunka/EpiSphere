@@ -16,3 +16,5 @@ class IngestResponse(BaseModel):
     success: bool
     records_imported: int
     errors: list[str] = []
+    warnings: list[str] = []
+    batch_id: int | None = None
