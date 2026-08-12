@@ -16,6 +16,10 @@
 6. Keep `POSTGRES_PORT_BIND` and `REDIS_PORT_BIND` loopback-only. Containers
    communicate over the internal Compose network; use a separately secured
    administrative tunnel or network path rather than exposing either service.
+7. Configure `OBJECT_STORAGE_BACKEND=s3` and an approved private report bucket
+   through the secret manager. The release image rejects container-local report
+   storage in production; do not place object-storage credentials in Compose
+   files, workflow exports, or GitHub variables.
 
 Pull requests build and scan the backend and frontend images for fixable high
 and critical operating-system and library vulnerabilities. Treat a failed

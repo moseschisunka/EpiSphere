@@ -27,6 +27,7 @@ from app.core.cache import redis_client
 from app.core.metrics import request_metrics
 from app.db.models import IngestionJob, IngestionJobStatus, WorkerHeartbeat
 from app.api.v1.api import api_router
+from app.services.object_storage import PrivateObjectStorage
 
 logger = setup_logging()
 
@@ -197,9 +198,7 @@ def component_readiness_check():
     else:
         components["redis"] = {"status": "not_required"}
 
-    components["upload_storage"] = {
-        "status": "ready" if settings.UPLOAD_DIR.exists() and settings.UPLOAD_DIR.is_dir() else "failed"
-    }
+    components["upload_storage"] = PrivateObjectStorage().readiness()
     if components["upload_storage"]["status"] == "failed":
         failures.append("upload_storage")
 

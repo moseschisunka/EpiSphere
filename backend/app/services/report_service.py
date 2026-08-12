@@ -2,12 +2,15 @@
 
 import csv
 import re
+import tempfile
 from typing import Optional
 from datetime import date, datetime
 from sqlalchemy.orm import Session
 from pathlib import Path
 
 from app.db.models import Report, ReportType, Case, Country, Disease
+from app.core.config import settings
+from app.services.object_storage import PrivateObjectStorage
 
 
 class ReportService:
@@ -15,8 +18,7 @@ class ReportService:
 
     def __init__(self, db: Session):
         self.db = db
-        self.reports_dir = Path("reports")
-        self.reports_dir.mkdir(exist_ok=True)
+        self.object_storage = PrivateObjectStorage()
 
     async def generate_report(
         self,
@@ -36,14 +38,20 @@ class ReportService:
 
         rows = self._get_case_rows(country_id, disease_id, start_date, end_date)
         summary = self._build_summary(title, report_type, rows, country_id, disease_id, start_date, end_date)
-        file_path = self._build_file_path(title, file_format)
-
-        if file_format == "pdf":
-            self._write_pdf(file_path, summary, rows)
-        elif file_format == "docx":
-            self._write_docx(file_path, summary, rows)
-        else:
-            self._write_csv(file_path, summary, rows)
+        object_key = self._build_object_key(title, file_format)
+        with tempfile.TemporaryDirectory(prefix="episphere-report-") as temporary_dir:
+            temporary_path = Path(temporary_dir) / f"report.{file_format}"
+            if file_format == "pdf":
+                self._write_pdf(temporary_path, summary, rows)
+            elif file_format == "docx":
+                self._write_docx(temporary_path, summary, rows)
+            else:
+                self._write_csv(temporary_path, summary, rows)
+            stored_key = self.object_storage.store_file(
+                temporary_path,
+                object_key,
+                self._content_type(file_format),
+            )
 
         report = Report(
             title=title,
@@ -52,7 +60,7 @@ class ReportService:
             disease_id=disease_id,
             start_date=start_date,
             end_date=end_date,
-            file_path=str(file_path),
+            file_path=stored_key,
             file_format=file_format,
             generated_by=user_id,
             report_metadata={
@@ -61,6 +69,7 @@ class ReportService:
                 "rows": len(rows),
                 "total_cases": summary["total_cases"],
                 "total_deaths": summary["total_deaths"],
+                "object_storage_backend": self.object_storage.backend,
             },
         )
 
@@ -98,10 +107,18 @@ class ReportService:
             "cfr": round((total_deaths / total_cases) * 100, 2) if total_cases else None,
         }
 
-    def _build_file_path(self, title: str, file_format: str) -> Path:
+    def _build_object_key(self, title: str, file_format: str) -> str:
         safe_title = re.sub(r"[^A-Za-z0-9_.-]+", "_", title).strip("_") or "report"
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        return self.reports_dir / f"{safe_title}_{timestamp}.{file_format}"
+        return f"{settings.REPORT_OBJECT_PREFIX.strip('/')}/{safe_title}_{timestamp}.{file_format}"
+
+    @staticmethod
+    def _content_type(file_format: str) -> str:
+        return {
+            "pdf": "application/pdf",
+            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "csv": "text/csv",
+        }[file_format]
 
     def _write_pdf(self, file_path: Path, summary: dict, rows):
         try:

@@ -10,8 +10,12 @@ pg_dump --format=custom --file=episphere-$(Get-Date -Format yyyyMMddHHmmss).dump
 ```
 
 Store encrypted backups outside the application host with a documented
-retention policy. Uploads/reports must use private durable object storage before
-real patient-level deployment; the current Compose volume is not a substitute.
+retention policy. Generated reports use private object storage through the
+`OBJECT_STORAGE_*` configuration. Production fails closed unless the S3 backend
+and credentials are configured. Use an approved private bucket with encryption
+and separately test a report restore/download path before real patient-level
+deployment. Source-upload payloads are not retained by default; their checksum,
+batch lineage, and validation evidence remain in the database.
 
 ## Restore drill
 

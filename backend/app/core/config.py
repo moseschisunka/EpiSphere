@@ -44,6 +44,17 @@ class Settings(BaseSettings):
 
     # File uploads
     UPLOAD_DIR: Path = Path("uploads")
+    # Generated reports are private objects. Local storage is development-only;
+    # production must use an S3-compatible private bucket.
+    OBJECT_STORAGE_BACKEND: str = "local"
+    LOCAL_OBJECT_STORAGE_DIR: Path = Path("object_storage")
+    OBJECT_STORAGE_BUCKET: str = ""
+    OBJECT_STORAGE_ENDPOINT_URL: str = ""
+    OBJECT_STORAGE_REGION: str = ""
+    OBJECT_STORAGE_ACCESS_KEY: str = ""
+    OBJECT_STORAGE_SECRET_KEY: str = ""
+    OBJECT_STORAGE_SERVER_SIDE_ENCRYPTION: str = "AES256"
+    REPORT_OBJECT_PREFIX: str = "reports"
     MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024  # 50MB
     MAX_UPLOAD_ROWS: int = 100_000
     MAX_XLSX_UNCOMPRESSED_SIZE: int = 200 * 1024 * 1024
@@ -112,6 +123,10 @@ class Settings(BaseSettings):
                 raise ValueError("SMTP_HOST, SMTP_USER, and SMTP_PASSWORD must be configured in production")
             if not self.WORKER_HEARTBEAT_REQUIRED:
                 raise ValueError("WORKER_HEARTBEAT_REQUIRED must be enabled in production")
+            if self.OBJECT_STORAGE_BACKEND.lower() != "s3":
+                raise ValueError("OBJECT_STORAGE_BACKEND must be s3 in production")
+            if not self.OBJECT_STORAGE_BUCKET or not self.OBJECT_STORAGE_ACCESS_KEY or not self.OBJECT_STORAGE_SECRET_KEY:
+                raise ValueError("OBJECT_STORAGE_BUCKET, OBJECT_STORAGE_ACCESS_KEY, and OBJECT_STORAGE_SECRET_KEY must be configured in production")
         return self
 
     @field_validator("CORS_ORIGINS", "ALLOWED_HOSTS", "PUBLIC_DATASET_ALLOWED_HOSTS", mode="before")
@@ -131,6 +146,8 @@ settings = Settings()
 
 # Create necessary local directories
 settings.UPLOAD_DIR.mkdir(exist_ok=True)
+if settings.OBJECT_STORAGE_BACKEND.lower() == "local":
+    settings.LOCAL_OBJECT_STORAGE_DIR.mkdir(exist_ok=True)
 settings.ML_MODEL_DIR.mkdir(exist_ok=True)
 
 
