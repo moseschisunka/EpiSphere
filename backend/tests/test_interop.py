@@ -67,8 +67,11 @@ def test_database_interop_data_query():
 import pytest
 from unittest.mock import patch, MagicMock
 from app.services.interop_service import InteropService
+from app.api.v1.endpoints.interop import receive_webhook
 from app.db.models import User, InteropLog
 from app.core.config import settings
+from app.core.dependencies import ServicePrincipal
+from app.schemas.interop_extract import WebhookPayload
 
 def test_pull_from_dhis2_mocked_success():
     db = make_session()
@@ -118,3 +121,30 @@ def test_pull_from_dhis2_mocked_success():
         assert len(logs) == 1
         assert logs[0].direction.value == "inbound"
         assert logs[0].status.value == "success"
+
+
+def test_webhook_records_schema_compatible_privacy_preserving_log():
+    db = make_session()
+    payload = WebhookPayload(
+        event_type="aggregate_update",
+        source_system="DHIS2",
+        data={"country": "ZMB", "daily_cases": 12},
+    )
+
+    response = receive_webhook(payload, db, ServicePrincipal(name="n8n", auth_method="x-api-key"))
+
+    assert response["status"] == "received"
+    log = db.query(InteropLog).one()
+    assert log.system_name == "DHIS2"
+    assert log.dataset_type == "aggregate_update"
+    assert "payload_hash" in log.details
+    assert "daily_cases" not in log.details
+
+
+def test_webhook_rejects_oversized_payload():
+    with pytest.raises(ValueError, match="1 MB or smaller"):
+        WebhookPayload(
+            event_type="aggregate_update",
+            source_system="DHIS2",
+            data={"blob": "x" * 1_000_001},
+        )

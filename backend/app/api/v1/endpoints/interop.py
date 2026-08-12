@@ -1,9 +1,12 @@
+import hashlib
+import json
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, date
 
 from app.api.v1.deps import allow_admin
+from app.core.dependencies import get_agent_or_admin
 from app.core.database import get_db
 from app.db.models import User, InteropLog, Case, Disease, Country, InteropDirection, InteropStatus
 from app.schemas.interop import DHIS2SyncRequest, DHIS2SyncResponse, DHIS2PullRequest, DHIS2PullResponse
@@ -130,19 +133,28 @@ def extract_deidentified_data(
 @router.post("/webhook")
 def receive_webhook(
     payload: WebhookPayload,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    agent_or_admin = Depends(get_agent_or_admin),
 ):
     """
     Receive inbound webhook events from external EHR, LIMS, or DHIS2 systems.
     Logs event into InteropLog audit ledger.
     """
+    payload_hash = hashlib.sha256(
+        json.dumps(payload.data, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    actor = agent_or_admin.name if hasattr(agent_or_admin, "name") else "admin"
     log_entry = InteropLog(
-        target_system=payload.source_system,
+        system_name=payload.source_system[:50],
         direction=InteropDirection.INBOUND,
         status=InteropStatus.SUCCESS,
-        payload_hash=str(hash(str(payload.data))),
-        request_payload=payload.data,
-        response_payload={"received": True, "event": payload.event_type},
+        dataset_type=payload.event_type[:50],
+        details={
+            "event_type": payload.event_type,
+            "payload_hash": payload_hash,
+            "payload_keys": sorted(payload.data.keys()),
+            "received_by": actor,
+        },
         timestamp=datetime.utcnow()
     )
     db.add(log_entry)
