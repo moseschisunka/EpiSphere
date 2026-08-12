@@ -4,14 +4,14 @@ from typing import List, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user, require_role
+from app.core.dependencies import require_role
 from app.db.models import Alert, AlertStatus, User, AuditLog, AuditAction
 from app.schemas.alert import AlertResponse, AlertUpdate, AlertFilter
 
 router = APIRouter()
+allow_alert_response = require_role(["admin", "epidemiologist", "facility_admin"])
 
 
 @router.get("/", response_model=List[AlertResponse])
@@ -22,7 +22,7 @@ async def list_alerts(
     status_filter: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(allow_alert_response),
     db: Session = Depends(get_db)
 ):
     """List alerts with filters"""
@@ -55,7 +55,7 @@ async def list_alerts(
 @router.get("/{alert_id}", response_model=AlertResponse)
 async def get_alert(
     alert_id: int,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(allow_alert_response),
     db: Session = Depends(get_db)
 ):
     """Get alert by ID"""
@@ -75,7 +75,7 @@ async def get_alert(
 async def resolve_alert(
     alert_id: int,
     alert_update: AlertUpdate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(allow_alert_response),
     db: Session = Depends(get_db)
 ):
     """Resolve or update alert status"""
@@ -83,8 +83,19 @@ async def resolve_alert(
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
     
-    # Update status
+    previous_status = alert.status
     if alert_update.status:
+        allowed_transitions = {
+            AlertStatus.TRIGGERED: {AlertStatus.INVESTIGATING, AlertStatus.RESOLVED, AlertStatus.FALSE_POSITIVE},
+            AlertStatus.INVESTIGATING: {AlertStatus.RESOLVED, AlertStatus.FALSE_POSITIVE},
+            AlertStatus.RESOLVED: set(),
+            AlertStatus.FALSE_POSITIVE: set(),
+        }
+        if alert_update.status != previous_status and alert_update.status not in allowed_transitions.get(previous_status, set()):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Alert status cannot transition from {previous_status.value} to {alert_update.status.value}",
+            )
         alert.status = alert_update.status
         
         if alert_update.status == AlertStatus.INVESTIGATING:
@@ -105,7 +116,11 @@ async def resolve_alert(
         action=AuditAction.UPDATE,
         resource_type="alert",
         resource_id=alert_id,
-        details={"status": alert.status.value if alert.status else None}
+        details={
+            "previous_status": previous_status.value if previous_status else None,
+            "status": alert.status.value if alert.status else None,
+            "resolution_notes_updated": alert_update.resolution_notes is not None,
+        }
     )
     db.add(audit_log)
     db.commit()

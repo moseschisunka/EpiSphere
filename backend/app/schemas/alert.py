@@ -1,6 +1,6 @@
 """Alert schemas"""
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, Any
 from datetime import datetime
 from app.db.models import AlertSeverity, AlertStatus
@@ -36,7 +36,7 @@ class AlertResponse(AlertBase):
 
 class AlertUpdate(BaseModel):
     status: Optional[AlertStatus] = None
-    resolution_notes: Optional[str] = None
+    resolution_notes: Optional[str] = Field(default=None, max_length=2000)
 
 
 class AlertFilter(BaseModel):

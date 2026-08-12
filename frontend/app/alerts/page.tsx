@@ -10,6 +10,7 @@ import clsx from 'clsx'
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [updatingAlertId, setUpdatingAlertId] = useState<number | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState({
     severity: '',
@@ -35,6 +36,27 @@ export default function AlertsPage() {
       toast.error('Failed to load outbreak alerts')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const updateAlert = async (alertId: number, nextStatus: string) => {
+    const resolutionNotes = nextStatus === 'resolved' || nextStatus === 'false_positive'
+      ? window.prompt('Add resolution notes (optional):') || undefined
+      : undefined
+
+    setUpdatingAlertId(alertId)
+    try {
+      const updated = await alertsApi.resolve(alertId, {
+        status: nextStatus,
+        resolution_notes: resolutionNotes,
+      })
+      setAlerts((current) => current.map((alert) => alert.id === alertId ? updated : alert))
+      toast.success(`Alert marked ${nextStatus.replace('_', ' ')}`)
+    } catch (error) {
+      console.error('Error updating alert:', error)
+      toast.error('Unable to update alert. Refresh and try again.')
+    } finally {
+      setUpdatingAlertId(null)
     }
   }
 
@@ -255,6 +277,29 @@ export default function AlertsPage() {
                     <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                   </Link>
                 </div>
+
+                {alert.status !== 'resolved' && alert.status !== 'false_positive' && (
+                  <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-100 dark:border-slate-800">
+                    {alert.status === 'triggered' && (
+                      <button
+                        type="button"
+                        onClick={() => updateAlert(alert.id, 'investigating')}
+                        disabled={updatingAlertId === alert.id}
+                        className="px-3 py-2 rounded-lg bg-sky-600 text-white text-xs font-bold hover:bg-sky-700 disabled:opacity-50"
+                      >
+                        {updatingAlertId === alert.id ? 'Updating…' : 'Start investigation'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => updateAlert(alert.id, alert.status === 'triggered' ? 'false_positive' : 'resolved')}
+                      disabled={updatingAlertId === alert.id}
+                      className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      {alert.status === 'triggered' ? 'Mark false positive' : 'Resolve alert'}
+                    </button>
+                  </div>
+                )}
               </div>
             )
           })}
