@@ -113,6 +113,7 @@ def trigger_dhis2_pull(
             errors=[],
             message="DHIS2 pull queued for durable worker execution.",
             job_id=job.id,
+            records_staged=0,
         )
     result = InteropService.pull_from_dhis2(
         db=db,

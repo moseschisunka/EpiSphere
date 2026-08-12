@@ -2308,6 +2308,13 @@ export interface components {
             message: string;
             /** Job Id */
             job_id?: number | null;
+            /**
+             * Records Staged
+             * @default 0
+             */
+            records_staged: number;
+            /** Batch Id */
+            batch_id?: number | null;
         };
         /** DHIS2SyncRequest */
         DHIS2SyncRequest: {

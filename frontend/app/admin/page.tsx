@@ -239,8 +239,10 @@ export default function AdminPage() {
         dryRun
           ? 'Pull simulated successfully!'
           : res.job_id
-            ? `DHIS2 pull queued as job #${res.job_id}.`
-            : 'Data pulled successfully from DHIS2!'
+            ? `DHIS2 validation queued as job #${res.job_id}; valid records require administrator approval.`
+            : res.records_staged
+              ? `${res.records_staged} DHIS2 records staged for administrator approval.`
+              : 'DHIS2 validation completed.'
       )
       fetchTabContent('interop')
     } catch (err: any) {
@@ -636,7 +638,7 @@ export default function AdminPage() {
                     Dry Run Fetch
                   </Button>
                   <Button variant="primary" className="flex-1 bg-emerald-600 hover:bg-emerald-700 border-none text-white" onClick={() => handleTestDHIS2Pull(false)}>
-                    Execute Pull
+                    Queue Pull Validation
                   </Button>
                 </div>
 
@@ -647,7 +649,16 @@ export default function AdminPage() {
                       {pullResult.message || 'Execution Result'}
                     </div>
                     {pullResult.records_imported !== undefined && (
-                      <div className="mt-2 text-xs">Records Imported: {pullResult.records_imported}</div>
+                      <div className="mt-2 text-xs">Records Validated: {pullResult.records_imported}</div>
+                    )}
+                    {pullResult.records_staged !== undefined && pullResult.records_staged > 0 && (
+                      <div className="mt-1 text-xs">Records Staged for Approval: {pullResult.records_staged}</div>
+                    )}
+                    {pullResult.batch_id && (
+                      <div className="mt-1 text-xs">Review Batch: #{pullResult.batch_id}</div>
+                    )}
+                    {pullResult.job_id && (
+                      <div className="mt-1 text-xs">Worker Job: #{pullResult.job_id} — an administrator must approve valid records after review.</div>
                     )}
                     {pullResult.errors?.length > 0 && (
                       <ul className="mt-2 text-xs list-disc list-inside">

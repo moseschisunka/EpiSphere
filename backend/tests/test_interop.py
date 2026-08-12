@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.models import Base, Country, Disease, Case
+from app.db.models import Base, Country, DataQualityCheck, Disease, Case, ImportStagedCase, ImportStatus
 from app.schemas.interop_extract import AggregateCaseMetric, DataExtractResponse
 
 def make_session():
@@ -67,6 +67,7 @@ def test_database_interop_data_query():
 import pytest
 from unittest.mock import patch, MagicMock
 from app.services.interop_service import InteropService
+from app.services.data_upload import DataUploadService
 from app.api.v1.endpoints.interop import receive_webhook
 from app.db.models import User, InteropLog, ImportBatch
 from app.core.config import settings
@@ -110,11 +111,16 @@ def test_pull_from_dhis2_mocked_success():
         
         assert result["success"] is True
         assert result["records_imported"] == 1
+        assert result["records_staged"] == 1
         
         # Check DB
         cases = db.query(Case).filter(Case.disease_id == disease.id).all()
-        assert len(cases) == 1
-        assert cases[0].daily_cases == 250
+        assert len(cases) == 0
+        batch = db.query(ImportBatch).one()
+        assert batch.status == ImportStatus.VALIDATED
+        assert batch.batch_metadata["mapping_version"] == "dhis2-pull-v1"
+        assert db.query(ImportStagedCase).filter(ImportStagedCase.batch_id == batch.id).count() == 1
+        assert db.query(DataQualityCheck).filter(DataQualityCheck.batch_id == batch.id).count() == 2
         
         # Check Log
         logs = db.query(InteropLog).all()
@@ -203,6 +209,8 @@ def test_repeating_dhis2_pull_is_idempotent():
         second = InteropService.pull_from_dhis2(**kwargs)
 
     assert first["records_imported"] == second["records_imported"] == 1
+    DataUploadService(db).commit_validated_batch(first["batch_id"], user_id=user.id)
+    DataUploadService(db).commit_validated_batch(second["batch_id"], user_id=user.id)
     assert db.query(Case).count() == 1
     assert db.query(ImportBatch).count() == 2
 

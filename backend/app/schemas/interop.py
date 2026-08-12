@@ -39,3 +39,5 @@ class DHIS2PullResponse(BaseModel):
     errors: list[str] = []
     message: str
     job_id: int | None = None
+    records_staged: int = 0
+    batch_id: int | None = None
