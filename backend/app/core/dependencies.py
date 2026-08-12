@@ -3,6 +3,8 @@ FastAPI dependencies for authorization and permissions (RBAC)
 """
 
 from typing import List, Optional
+import hmac
+import os
 from fastapi import Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
@@ -135,3 +137,37 @@ allow_clinician = RoleChecker(["admin", "clinician", "facility_admin"])
 allow_pharmacist = RoleChecker(["admin", "pharmacist", "facility_admin"])
 allow_data_officer = RoleChecker(["admin", "epidemiologist", "country_data_officer", "facility_admin"])
 
+def get_agent_or_admin(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Dependency that allows access if EITHER:
+    1. A valid X-API-Key is provided (for n8n autonomous agents)
+    2. A valid Bearer token for an Admin user is provided
+    """
+    from app.core.security import decode_access_token
+    from app.db.models import User
+    
+    # 1. Check API Key
+    api_key = request.headers.get("x-api-key")
+    configured_key = os.environ.get("AGENT_API_KEY")
+    if api_key and configured_key and hmac.compare_digest(api_key, configured_key):
+        return "agent"
+
+    # 2. Check JWT Bearer
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+        payload = decode_access_token(token)
+        if payload:
+            user_id = payload.get("sub")
+            if user_id:
+                user = db.query(User).filter(User.id == int(user_id)).first()
+                if user and user.is_active and user.role and getattr(user.role, 'name', '').lower() == "admin":
+                    return user
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Valid X-API-Key or Admin Bearer token required",
+    )

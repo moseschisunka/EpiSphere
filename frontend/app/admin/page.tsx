@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { newsApi, covidIngestApi, interopApi, authApi } from '@/lib/api'
+import { newsApi, covidIngestApi, interopApi, authApi, datasetsApi } from '@/lib/api'
 import { toast } from 'sonner'
 import {
   ShieldAlert, Newspaper, Database, Share2, Plus, Trash2, Edit3, Eye,
@@ -47,12 +47,29 @@ export default function AdminPage() {
   // Ingestion state
   const [ingestStatus, setIngestStatus] = useState<any>(null)
   const [ingestLoading, setIngestLoading] = useState(false)
+  
+  // Public Datasets state
+  const [publicDatasetMode, setPublicDatasetMode] = useState<'csv' | 'who'>('who')
+  const [csvUrl, setCsvUrl] = useState('https://example.com/dataset.csv')
+  const [csvMapping, setCsvMapping] = useState('{\n  "country_iso": "Country",\n  "date": "Date",\n  "daily_cases": "Cases"\n}')
+  const [whoIndicator, setWhoIndicator] = useState('CHOLERA_0000000001')
+  const [datasetDiseaseId, setDatasetDiseaseId] = useState('2')
+  const [datasetResult, setDatasetResult] = useState<any>(null)
+  const [datasetLoading, setDatasetLoading] = useState(false)
 
   // Interop state
   const [interopLogs, setInteropLogs] = useState<any[]>([])
   const [dhis2Dataset, setDhis2Dataset] = useState('COVID19_WEEKLY_AGGREGATE')
   const [dhis2Payload, setDhis2Payload] = useState('{\n  "orgUnit": "GLOBAL_WHO",\n  "period": "2026W31",\n  "dataValues": [\n    {"dataElement": "cases_new", "value": 1420}\n  ]\n}')
   const [syncResult, setSyncResult] = useState<any>(null)
+  
+  // DHIS2 Pull state
+  const [pullDataset, setPullDataset] = useState('COVID19_WEEKLY_AGGREGATE')
+  const [pullOrgUnit, setPullOrgUnit] = useState('GLOBAL_WHO')
+  const [pullPeriod, setPullPeriod] = useState('202301')
+  const [pullCountryId, setPullCountryId] = useState('1')
+  const [pullMapping, setPullMapping] = useState('{\n  "dhis2_element_uuid": 1\n}')
+  const [pullResult, setPullResult] = useState<any>(null)
 
   useEffect(() => {
     checkAdminAuth()
@@ -164,6 +181,27 @@ export default function AdminPage() {
     }
   }
 
+  const handleDatasetIngest = async (dryRun: boolean) => {
+    setDatasetLoading(true)
+    setDatasetResult(null)
+    try {
+      let res;
+      if (publicDatasetMode === 'who') {
+        res = await datasetsApi.ingestWho(whoIndicator, parseInt(datasetDiseaseId), dryRun)
+      } else {
+        const parsedMapping = JSON.parse(csvMapping)
+        res = await datasetsApi.ingestCsv(csvUrl, parsedMapping, parseInt(datasetDiseaseId), dryRun)
+      }
+      setDatasetResult(res)
+      toast.success(dryRun ? 'Dataset dry-run parsed successfully!' : 'Dataset ingested successfully!')
+    } catch (err: any) {
+      toast.error('Dataset ingestion failed')
+      setDatasetResult(err.response?.data?.detail || { success: false, errors: ['Request failed'] })
+    } finally {
+      setDatasetLoading(false)
+    }
+  }
+
   // Interop Handlers
   const handleTestDHIS2Sync = async (dryRun: boolean) => {
     try {
@@ -175,6 +213,19 @@ export default function AdminPage() {
     } catch (err: any) {
       toast.error(err.response?.data?.detail?.message || 'DHIS2 Sync failed')
       setSyncResult(err.response?.data?.detail || { success: false, errors: ['Invalid JSON payload or connection error'] })
+    }
+  }
+
+  const handleTestDHIS2Pull = async (dryRun: boolean) => {
+    try {
+      const parsedMapping = JSON.parse(pullMapping)
+      const res = await interopApi.pullDHIS2(pullDataset, pullOrgUnit, pullPeriod, parsedMapping, parseInt(pullCountryId), dryRun)
+      setPullResult(res)
+      toast.success(dryRun ? 'Pull simulated successfully!' : 'Data pulled successfully from DHIS2!')
+      fetchTabContent('interop')
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail?.message || 'DHIS2 Pull failed')
+      setPullResult(err.response?.data?.detail || { success: false, errors: ['Invalid mapping JSON or connection error'] })
     }
   }
 
@@ -364,6 +415,89 @@ export default function AdminPage() {
                 </div>
               </Card>
 
+              {/* Public Dataset Ingestion Card */}
+              <Card variant="elevated" className="col-span-1 md:col-span-3 space-y-6">
+                <div>
+                  <div className="flex items-center gap-2 text-fuchsia-600 dark:text-fuchsia-400 font-semibold text-sm">
+                    <Database className="w-4 h-4" /> Universal Dataset Ingestor
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mt-1">Consume Public Datasets</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Pull data from WHO Global Health Observatory or any public CSV URL.</p>
+                </div>
+
+                <div className="flex gap-4 mb-4">
+                  <Button variant={publicDatasetMode === 'who' ? 'primary' : 'outline'} onClick={() => setPublicDatasetMode('who')} className="flex-1">
+                    WHO GHO API
+                  </Button>
+                  <Button variant={publicDatasetMode === 'csv' ? 'primary' : 'outline'} onClick={() => setPublicDatasetMode('csv')} className="flex-1">
+                    Public CSV URL
+                  </Button>
+                </div>
+
+                {publicDatasetMode === 'who' ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">WHO Indicator Code</label>
+                        <Input value={whoIndicator} onChange={(e) => setWhoIndicator(e.target.value)} placeholder="e.g. CHOLERA_0000000001" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">Target Disease ID</label>
+                        <Input type="number" value={datasetDiseaseId} onChange={(e) => setDatasetDiseaseId(e.target.value)} />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">Public CSV URL</label>
+                        <Input value={csvUrl} onChange={(e) => setCsvUrl(e.target.value)} placeholder="https://..." />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">Target Disease ID</label>
+                        <Input type="number" value={datasetDiseaseId} onChange={(e) => setDatasetDiseaseId(e.target.value)} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">Column Mapping (JSON)</label>
+                      <textarea
+                        rows={4}
+                        value={csvMapping}
+                        onChange={(e) => setCsvMapping(e.target.value)}
+                        className="w-full font-mono text-sm bg-gray-900 text-fuchsia-400 p-3 rounded-xl border border-gray-700 focus:ring-2 focus:ring-fuchsia-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 pt-4">
+                  <Button variant="outline" className="flex-1" onClick={() => handleDatasetIngest(true)} disabled={datasetLoading}>
+                    Dry Run Parser
+                  </Button>
+                  <Button variant="primary" className="flex-1 bg-fuchsia-600 hover:bg-fuchsia-700 border-none text-white" onClick={() => handleDatasetIngest(false)} disabled={datasetLoading}>
+                    Execute Ingestion
+                  </Button>
+                </div>
+
+                {datasetResult && (
+                  <div className={`p-4 rounded-xl text-sm font-mono ${datasetResult.success ? 'bg-fuchsia-50 text-fuchsia-800 dark:bg-fuchsia-950/50 dark:text-fuchsia-300' : 'bg-red-50 text-red-800 dark:bg-red-950/50 dark:text-red-300'}`}>
+                    <div className="font-bold flex items-center gap-2">
+                      <StatusDot status={datasetResult.success ? 'active' : 'error'} />
+                      {datasetResult.message || 'Execution Result'}
+                    </div>
+                    {datasetResult.records_imported !== undefined && (
+                      <div className="mt-2 text-xs">Records Imported: {datasetResult.records_imported}</div>
+                    )}
+                    {datasetResult.errors?.length > 0 && (
+                      <ul className="mt-2 text-xs list-disc list-inside">
+                        {datasetResult.errors.map((err: string, i: number) => <li key={i}>{err}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </Card>
+
             </div>
           </div>
         )}
@@ -416,6 +550,75 @@ export default function AdminPage() {
                     {syncResult.errors?.length > 0 && (
                       <ul className="mt-2 text-xs list-disc list-inside">
                         {syncResult.errors.map((err: string, i: number) => <li key={i}>{err}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* DHIS2 Inbound Data Pull */}
+            <Card variant="elevated" className="space-y-6">
+              <div>
+                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold text-sm">
+                  <Download className="w-4 h-4" /> DHIS2 Data Pull
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mt-1">Inbound Sync Configuration</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Fetch dataset values directly from DHIS2 and store them as Cases.</p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">Dataset ID</label>
+                    <Input value={pullDataset} onChange={(e) => setPullDataset(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">Org Unit ID</label>
+                    <Input value={pullOrgUnit} onChange={(e) => setPullOrgUnit(e.target.value)} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">Period</label>
+                    <Input value={pullPeriod} onChange={(e) => setPullPeriod(e.target.value)} placeholder="e.g. 202301" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">Country ID</label>
+                    <Input type="number" value={pullCountryId} onChange={(e) => setPullCountryId(e.target.value)} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">Mapping (JSON)</label>
+                  <textarea
+                    rows={4}
+                    value={pullMapping}
+                    onChange={(e) => setPullMapping(e.target.value)}
+                    className="w-full font-mono text-sm bg-gray-900 text-emerald-400 p-3 rounded-xl border border-gray-700 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Button variant="outline" className="flex-1" onClick={() => handleTestDHIS2Pull(true)}>
+                    Dry Run Fetch
+                  </Button>
+                  <Button variant="primary" className="flex-1 bg-emerald-600 hover:bg-emerald-700 border-none text-white" onClick={() => handleTestDHIS2Pull(false)}>
+                    Execute Pull
+                  </Button>
+                </div>
+
+                {pullResult && (
+                  <div className={`p-4 rounded-xl text-sm font-mono ${pullResult.success ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-red-50 text-red-800 dark:bg-red-950/50 dark:text-red-300'}`}>
+                    <div className="font-bold flex items-center gap-2">
+                      <StatusDot status={pullResult.success ? 'active' : 'error'} />
+                      {pullResult.message || 'Execution Result'}
+                    </div>
+                    {pullResult.records_imported !== undefined && (
+                      <div className="mt-2 text-xs">Records Imported: {pullResult.records_imported}</div>
+                    )}
+                    {pullResult.errors?.length > 0 && (
+                      <ul className="mt-2 text-xs list-disc list-inside">
+                        {pullResult.errors.map((err: string, i: number) => <li key={i}>{err}</li>)}
                       </ul>
                     )}
                   </div>

@@ -1,12 +1,12 @@
-﻿from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional
 import re
 
 import httpx
 
 from app.core.config import settings
-from app.db.models import InteropLog, InteropDirection, InteropStatus, User, DHIS2Mapping
-
+from app.db.models import InteropLog, InteropDirection, InteropStatus, User, DHIS2Mapping, Case
+from datetime import datetime
 
 class InteropService:
     DEFAULT_REQUIRED_FIELDS = {
@@ -119,6 +119,145 @@ class InteropService:
             "errors": [],
             "message": "DHIS2 payload sent successfully.",
         }
+
+    @staticmethod
+    def pull_from_dhis2(
+        db: Session,
+        user: User,
+        dataset_id: str,
+        org_unit: str,
+        period: str,
+        mapping: Dict[str, int],
+        country_id: int,
+        dry_run: bool = False,
+    ) -> Dict[str, Any]:
+        """Pull aggregate data from DHIS2 and store it in EpiSphere."""
+        try:
+            if len(period) == 6 and period.isdigit():
+                # YYYYMM format
+                record_date = datetime.strptime(f"{period}01", "%Y%m%d").date()
+            else:
+                # Assume ISO format or fallback to today
+                record_date = datetime.fromisoformat(period).date()
+        except ValueError:
+            record_date = datetime.utcnow().date()
+
+        log = InteropLog(
+            system_name="DHIS2",
+            direction=InteropDirection.INBOUND,
+            status=InteropStatus.PENDING,
+            dataset_type=dataset_id,
+            details={
+                "triggered_by": user.username,
+                "org_unit": org_unit,
+                "period": period,
+                "dry_run": dry_run,
+            },
+        )
+        db.add(log)
+        db.flush()
+
+        if dry_run or not settings.DHIS2_URL:
+            log.status = InteropStatus.SUCCESS
+            log.details = {**(log.details or {}), "message": "Dry run or DHIS2_URL not configured."}
+            db.commit()
+            return {
+                "success": True,
+                "status": log.status.value,
+                "log_id": log.id,
+                "records_imported": 0,
+                "dry_run": True,
+                "errors": [],
+                "message": "DHIS2 pull simulated (dry-run).",
+            }
+
+        try:
+            endpoint = settings.DHIS2_URL.rstrip("/") + "/api/dataValueSets"
+            params = {
+                "dataSet": dataset_id,
+                "period": period,
+                "orgUnit": org_unit
+            }
+            auth = None
+            if settings.DHIS2_USERNAME and settings.DHIS2_PASSWORD:
+                auth = (settings.DHIS2_USERNAME, settings.DHIS2_PASSWORD)
+
+            response = httpx.get(
+                endpoint,
+                params=params,
+                auth=auth,
+                timeout=settings.DHIS2_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            data_values = data.get("dataValues", [])
+            records_imported = 0
+
+            for dv in data_values:
+                dhis2_element = dv.get("dataElement")
+                value = dv.get("value")
+                
+                disease_id = mapping.get(dhis2_element)
+                if not disease_id:
+                    continue
+                
+                try:
+                    cases_count = int(value)
+                except (ValueError, TypeError):
+                    continue
+
+                case_record = db.query(Case).filter(
+                    Case.country_id == country_id,
+                    Case.disease_id == disease_id,
+                    Case.date == record_date,
+                    Case.source == "DHIS2 Integration"
+                ).first()
+
+                if case_record:
+                    case_record.daily_cases = cases_count
+                else:
+                    new_case = Case(
+                        country_id=country_id,
+                        disease_id=disease_id,
+                        date=record_date,
+                        daily_cases=cases_count,
+                        source="DHIS2 Integration"
+                    )
+                    db.add(new_case)
+                records_imported += 1
+
+            log.status = InteropStatus.SUCCESS
+            log.details = {
+                **(log.details or {}),
+                "records_imported": records_imported,
+                "response_preview": str(data)[:500]
+            }
+            db.commit()
+
+            return {
+                "success": True,
+                "status": log.status.value,
+                "log_id": log.id,
+                "records_imported": records_imported,
+                "dry_run": False,
+                "errors": [],
+                "message": f"Successfully imported {records_imported} records from DHIS2.",
+            }
+
+        except Exception as e:
+            log.status = InteropStatus.FAILURE
+            log.details = {**(log.details or {}), "error": str(e)}
+            db.commit()
+            return {
+                "success": False,
+                "status": log.status.value,
+                "log_id": log.id,
+                "records_imported": 0,
+                "dry_run": False,
+                "errors": [str(e)],
+                "message": "Failed to pull data from DHIS2.",
+            }
 
     @staticmethod
     def _resolve_mapping(db: Session, dataset: str, mapping_id: Optional[int]) -> tuple[Optional[DHIS2Mapping], list[str]]:

@@ -62,3 +62,59 @@ def test_database_interop_data_query():
     assert len(cases) == 1
     assert cases[0].daily_cases == 100
     assert cases[0].disease.name == "COVID-19"
+
+
+import pytest
+from unittest.mock import patch, MagicMock
+from app.services.interop_service import InteropService
+from app.db.models import User, InteropLog
+from app.core.config import settings
+
+def test_pull_from_dhis2_mocked_success():
+    db = make_session()
+    country = Country(name="Zambia", iso_code="ZMB", iso_code_2="ZM")
+    disease = Disease(name="Malaria", code="B50")
+    user = User(username="admin", email="admin@test.com", hashed_password="pw", role_id=1)
+    db.add_all([country, disease, user])
+    db.commit()
+    
+    mock_dhis2_response = {
+        "dataValues": [
+            {"dataElement": "de_malaria_1", "period": "202301", "orgUnit": "ou_zambia", "value": "250"},
+            {"dataElement": "de_unknown", "period": "202301", "orgUnit": "ou_zambia", "value": "10"}
+        ]
+    }
+    
+    mapping = {"de_malaria_1": disease.id}
+    
+    with patch("httpx.get") as mock_get, patch.object(settings, "DHIS2_URL", "https://dhis2.example"):
+        mock_response = MagicMock()
+        mock_response.json.return_value = mock_dhis2_response
+        mock_response.raise_for_status.return_value = None
+        mock_get.return_value = mock_response
+        
+        # Test the pull
+        result = InteropService.pull_from_dhis2(
+            db=db,
+            user=user,
+            dataset_id="ds_123",
+            org_unit="ou_zambia",
+            period="202301",
+            mapping=mapping,
+            country_id=country.id,
+            dry_run=False
+        )
+        
+        assert result["success"] is True
+        assert result["records_imported"] == 1
+        
+        # Check DB
+        cases = db.query(Case).filter(Case.disease_id == disease.id).all()
+        assert len(cases) == 1
+        assert cases[0].daily_cases == 250
+        
+        # Check Log
+        logs = db.query(InteropLog).all()
+        assert len(logs) == 1
+        assert logs[0].direction.value == "inbound"
+        assert logs[0].status.value == "success"

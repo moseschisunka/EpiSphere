@@ -46,6 +46,7 @@ services:
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
       CORS_ORIGINS: http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001
+      AGENT_API_KEY: ${AGENT_API_KEY:-}
     ports:
       - "8000:8000"
     volumes:
@@ -69,7 +70,28 @@ services:
     depends_on:
       - backend
 
+  # n8n Orchestrator for automated scraping
+  n8n:
+    image: n8nio/n8n
+    container_name: episphere_n8n
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Africa/Lusaka
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:-}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
   redis_data:
   backend_uploads:
+  n8n_data:

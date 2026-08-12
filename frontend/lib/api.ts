@@ -191,6 +191,10 @@ export const interopApi = {
   syncDHIS2: async (dataset: string, payload: any, dryRun: boolean = false, mappingId?: number) => {
     const response = await api.post('/interop/dhis2/sync', { dataset, payload, dry_run: dryRun, mapping_id: mappingId })
     return response.data
+  },
+  pullDHIS2: async (dataset_id: string, org_unit: string, period: string, mapping: any, country_id: number, dry_run: boolean = false) => {
+    const response = await api.post('/interop/dhis2/pull', { dataset_id, org_unit, period, mapping, country_id, dry_run })
+    return response.data
   }
 }
 
@@ -262,6 +266,17 @@ export const locationsApi = {
   },
   getDistricts: async (countryId: number, province: string) => {
     const response = await api.get('/locations/districts', { params: { country_id: countryId, province } })
+    return response.data
+  }
+}
+
+export const datasetsApi = {
+  ingestCsv: async (url: string, mapping: any, diseaseId: number, dryRun: boolean = false) => {
+    const response = await api.post('/datasets/ingest-csv', { url, mapping, disease_id: diseaseId, dry_run: dryRun })
+    return response.data
+  },
+  ingestWho: async (indicatorCode: string, diseaseId: number, dryRun: boolean = false) => {
+    const response = await api.post('/datasets/ingest-who', { indicator_code: indicatorCode, disease_id: diseaseId, dry_run: dryRun })
     return response.data
   }
 }
