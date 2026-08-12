@@ -12,6 +12,7 @@ from app.db.models import User, InteropLog, Case, Disease, Country, InteropDirec
 from app.schemas.administration import SourceSystemResponse
 from app.schemas.interop import DHIS2SyncRequest, DHIS2SyncResponse, DHIS2PullRequest, DHIS2PullResponse
 from app.schemas.interop_extract import DataExtractResponse, AggregateCaseMetric, WebhookPayload
+from app.schemas.operational import InteropLogResponse
 from app.services.interop_service import InteropService
 from app.services.ingestion_jobs import enqueue_job
 
@@ -128,7 +129,7 @@ def trigger_dhis2_pull(
     return result
 
 
-@router.get("/logs")
+@router.get("/logs", response_model=List[InteropLogResponse])
 def get_interop_logs(
     skip: int = 0,
     limit: int = 50,

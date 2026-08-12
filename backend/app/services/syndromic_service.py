@@ -12,6 +12,12 @@ class SyndromicService:
         "Gastrointestinal": ["diarrhea", "vomiting", "nausea", "abdominal pain"],
         "Neurological": ["seizure", "confusion", "stiff neck", "paralysis"]
     }
+    SYNDROME_KEYS = {
+        "Febrile Illness": "febrile_illness",
+        "Acute Respiratory": "acute_respiratory",
+        "Gastrointestinal": "gastrointestinal",
+        "Neurological": "neurological",
+    }
 
     @staticmethod
     def analyze_encounter(encounter: Encounter) -> List[str]:
@@ -85,7 +91,10 @@ class SyndromicService:
         while current <= end_date:
             d_key = current.isoformat()
             stats = daily_stats.get(d_key, {s: 0 for s in SyndromicService.SYNDROME_DEFINITIONS.keys()})
-            result.append({"date": d_key, **stats})
+            result.append({
+                "date": d_key,
+                **{SyndromicService.SYNDROME_KEYS[name]: count for name, count in stats.items()},
+            })
             current += timedelta(days=1)
             
         return result

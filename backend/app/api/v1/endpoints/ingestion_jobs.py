@@ -5,6 +5,7 @@ from app.core.database import get_db
 from app.core.dependencies import enforce_country_scope, get_current_active_user, require_role
 from app.db.models import User
 from app.services.ingestion_jobs import get_job, replay_job, request_cancel
+from app.schemas.operational import IngestionJobResponse
 
 router = APIRouter()
 OPERATORS = ["admin", "epidemiologist", "country_data_officer"]
@@ -31,7 +32,7 @@ def _serialize(job) -> dict:
     }
 
 
-@router.get("/{job_id}")
+@router.get("/{job_id}", response_model=IngestionJobResponse)
 def get_ingestion_job(
     job_id: int,
     current_user: User = Depends(require_role(OPERATORS)),
@@ -44,7 +45,7 @@ def get_ingestion_job(
     return _serialize(job)
 
 
-@router.post("/{job_id}/cancel")
+@router.post("/{job_id}/cancel", response_model=IngestionJobResponse)
 def cancel_ingestion_job(
     job_id: int,
     current_user: User = Depends(require_role(OPERATORS)),
@@ -57,7 +58,7 @@ def cancel_ingestion_job(
     return _serialize(request_cancel(db, job))
 
 
-@router.post("/{job_id}/replay")
+@router.post("/{job_id}/replay", response_model=IngestionJobResponse)
 def replay_ingestion_job(
     job_id: int,
     current_user: User = Depends(require_role(["admin", "epidemiologist"])),

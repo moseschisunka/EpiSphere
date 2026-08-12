@@ -27,24 +27,8 @@ export type ApiQuery<Operation> = Operation extends { parameters: { query?: infe
 export type ApiPath<Operation> = Operation extends { parameters: { path?: infer Path } } ? Path : never
 
 export type CurrentUser = ApiResponse<operations['get_current_user_info_api_v1_auth_me_get']>
-export type Country = {
-  id: number
-  name: string
-  iso_code: string
-  iso_code_2?: string | null
-  region_id?: number | null
-  population?: number | null
-  latitude?: number | null
-  longitude?: number | null
-}
-export type Disease = {
-  id: number
-  name: string
-  code: string
-  description?: string | null
-  biosafety_level?: string | null
-  is_active: boolean
-}
+export type Country = ApiSchemas['CountryResponse']
+export type Disease = ApiSchemas['DiseaseResponse']
 export type Facility = ApiSchemas['Facility']
 export type Dashboard = ApiResponse<operations['get_global_dashboard_api_v1_dashboard_global_get']>
 export type CountryDashboard = ApiResponse<operations['get_country_dashboard_api_v1_dashboard_country__country_id__get']>
@@ -67,8 +51,8 @@ export type Dhis2PullRequest = ApiRequestBody<operations['trigger_dhis2_pull_api
 export type CsvIngestRequest = ApiRequestBody<operations['ingest_csv_dataset_api_v1_datasets_ingest_csv_post']>
 export type WhoIngestRequest = ApiRequestBody<operations['ingest_who_gho_dataset_api_v1_datasets_ingest_who_post']>
 
-export type CountriesResponse = Country[]
-export type DiseasesResponse = Disease[]
+export type CountriesResponse = ApiResponse<operations['list_countries_api_v1_countries__get']>
+export type DiseasesResponse = ApiResponse<operations['list_diseases_api_v1_diseases__get']>
 export type AlertStatus = ApiSchemas['AlertStatus']
 export type CasesResponse = ApiResponse<operations['list_cases_api_v1_cases__get']>
 export type AlertsResponse = ApiResponse<operations['list_alerts_api_v1_alerts__get']>
@@ -78,65 +62,23 @@ export type RolesResponse = ApiResponse<operations['list_roles_api_v1_users_role
 export type PatientsResponse = ApiResponse<operations['list_patients_api_v1_clinical_patients_get']>
 export type PrescriptionsResponse = ApiResponse<operations['list_pending_prescriptions_api_v1_pharmacy_prescriptions_get']>
 export type SourceSystemsResponse = ApiResponse<operations['list_source_systems_api_v1_interop_source_systems_get']>
-export type InteropLog = {
-  id: number
-  system_name: string
-  direction: string
-  status: string
-  dataset_type: string
-  timestamp: string
-  target_system?: string | null
-}
-export type InteropLogsResponse = InteropLog[]
-export type PublicStatsResponse = {
-  total_visits_recorded: number
-  participating_facilities: number
-  alert_level: string
-}
-export type PublicMapPoint = { type: 'facility'; name: string; lat: number; lon: number; count: number }
-export type PublicMapResponse = PublicMapPoint[]
-export type PublicAlert = { severity: string; message: string }
-export type PublicAlertsResponse = PublicAlert[]
+export type InteropLog = ApiSchemas['InteropLogResponse']
+export type InteropLogsResponse = ApiResponse<operations['get_interop_logs_api_v1_interop_logs_get']>
+export type PublicStatsResponse = ApiResponse<operations['get_public_stats_api_v1_public_stats_get']>
+export type PublicMapPoint = ApiSchemas['PublicMapPointResponse']
+export type PublicMapResponse = ApiResponse<operations['get_public_map_api_v1_public_map_get']>
+export type PublicAlert = ApiSchemas['PublicAlertResponse']
+export type PublicAlertsResponse = ApiResponse<operations['get_public_alerts_api_v1_public_alerts_get']>
 export type PublicNewsResponse = ApiResponse<operations['get_public_news_api_v1_public_news_get']>
 export type NewsResponse = ApiResponse<operations['list_news_articles_api_v1_news_get']>
-export type LocationFacility = {
-  id: number
-  name: string
-  type: string
-  province?: string | null
-  district?: string | null
-  latitude?: number | null
-  longitude?: number | null
-}
-export type LocationCountry = {
-  id: number
-  name: string
-  iso_code: string
-  provinces: string[]
-  districts: string[]
-  facility_count: number
-  facilities: LocationFacility[]
-}
-export type LocationHierarchyResponse = Array<{
-  region_id: number
-  region_name: string
-  region_code: string
-  countries: LocationCountry[]
-}>
-export type DistrictsResponse = { country_id: number; province: string; districts: string[] }
-export type ProvincesResponse = { country_id: number; provinces: string[] }
-export type SyndromicTrend = { date: string; [syndrome: string]: string | number }
-export type SyndromicTrendsResponse = SyndromicTrend[]
-export type FacilityHeatmapPoint = {
-  name: string
-  type: string
-  facility_code?: string | null
-  admin1_code?: string | null
-  admin2_code?: string | null
-  lat: number
-  lon: number
-  count: number
-}
-export type FacilityHeatmapResponse = FacilityHeatmapPoint[]
+export type LocationFacility = ApiSchemas['LocationFacilityResponse']
+export type LocationCountry = ApiSchemas['LocationCountryResponse']
+export type LocationHierarchyResponse = ApiResponse<operations['get_location_hierarchy_api_v1_locations_hierarchy_get']>
+export type DistrictsResponse = ApiResponse<operations['get_districts_by_province_api_v1_locations_districts_get']>
+export type ProvincesResponse = ApiResponse<operations['get_provinces_by_country_api_v1_locations_provinces_get']>
+export type SyndromicTrend = ApiSchemas['SyndromicTrendResponse']
+export type SyndromicTrendsResponse = ApiResponse<operations['get_syndromic_trends_api_v1_surveillance_syndromes_trends_get']>
+export type FacilityHeatmapPoint = ApiSchemas['FacilityHeatmapPointResponse']
+export type FacilityHeatmapResponse = ApiResponse<operations['get_facility_heatmap_api_v1_surveillance_heatmap_get']>
 export type CovidIngestResponse = { message?: string; job_id?: number | null; status?: string; result?: unknown; error?: string | null }
 export type IngestionResponse = ApiResponse<operations['ingest_csv_dataset_api_v1_datasets_ingest_csv_post']>

@@ -16,6 +16,7 @@ from app.core.dependencies import (
 )
 from app.db.models import Case, Country, Disease, User, AuditLog, AuditAction, ImportBatch, ImportRowError, ImportStatus, SourceSystem
 from app.schemas.case import CaseCreate, CaseResponse, CaseUpdate, CaseBulkUpload, CaseStats, CaseUploadResult
+from app.schemas.operational import ImportBatchDetailResponse
 from app.services.case_service import CaseService
 from app.services.data_upload import DataUploadService
 from app.services.ingestion_lineage import create_import_batch, get_or_create_source_system
@@ -163,7 +164,7 @@ async def upload_cases(
     return result
 
 
-@router.get("/imports/{batch_id}")
+@router.get("/imports/{batch_id}", response_model=ImportBatchDetailResponse)
 async def get_import_batch(
     batch_id: int,
     current_user: User = Depends(require_role(["country_data_officer", "admin", "epidemiologist"])),

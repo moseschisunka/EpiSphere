@@ -6,7 +6,7 @@ from typing import Optional
 from datetime import date
 
 from app.core.database import get_db
-from app.schemas.dashboard import DashboardResponse, CountryDashboardRequest
+from app.schemas.dashboard import CountryDashboardResponse, DashboardResponse
 from app.services.dashboard_service import DashboardService
 
 router = APIRouter()
@@ -29,7 +29,7 @@ async def get_global_dashboard(
     return dashboard_data
 
 
-@router.get("/country/{country_id}", response_model=dict)
+@router.get("/country/{country_id}", response_model=CountryDashboardResponse)
 async def get_country_dashboard(
     country_id: int,
     disease_id: Optional[int] = Query(None),

@@ -1,16 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import List
 
 from app.api.v1.deps import allow_clinician, allow_admin
 from app.core.database import get_db
 from app.db.models import User
 from app.services.syndromic_service import SyndromicService
 from app.services.dashboard_service import DashboardService
+from app.schemas.operational import FacilityHeatmapPointResponse, SyndromicTrendResponse
 
 router = APIRouter()
 
-@router.get("/syndromes/trends")
+@router.get("/syndromes/trends", response_model=List[SyndromicTrendResponse])
 def get_syndromic_trends(
     days: int = 7,
     db: Session = Depends(get_db),
@@ -32,7 +33,7 @@ def get_syndromic_trends(
         # Log the error here in a real app
         raise HTTPException(status_code=500, detail="Failed to fetch syndromic trends")
 
-@router.get("/heatmap")
+@router.get("/heatmap", response_model=List[FacilityHeatmapPointResponse])
 def get_facility_heatmap(
     db: Session = Depends(get_db),
     current_user: User = Depends(allow_clinician)

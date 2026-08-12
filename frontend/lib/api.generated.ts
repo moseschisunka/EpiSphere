@@ -2039,6 +2039,111 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** CountryDashboardCountry */
+        CountryDashboardCountry: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Iso Code */
+            iso_code: string;
+            /** Population */
+            population?: number | null;
+        };
+        /** CountryDashboardLatestStats */
+        CountryDashboardLatestStats: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Daily Cases */
+            daily_cases: number;
+            /** Cumulative Cases */
+            cumulative_cases: number;
+            /** Daily Deaths */
+            daily_deaths: number;
+            /** Cumulative Deaths */
+            cumulative_deaths: number;
+        };
+        /** CountryDashboardMovingAverage */
+        CountryDashboardMovingAverage: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Value */
+            value: number;
+        };
+        /** CountryDashboardQuality */
+        CountryDashboardQuality: {
+            /**
+             * Date Range Start
+             * Format: date
+             */
+            date_range_start: string;
+            /**
+             * Date Range End
+             * Format: date
+             */
+            date_range_end: string;
+            /** Latest Data Date */
+            latest_data_date?: string | null;
+            /** Reporting Lag Days */
+            reporting_lag_days?: number | null;
+            /** Completeness */
+            completeness: number;
+            /** Freshness Status */
+            freshness_status: string;
+        };
+        /** CountryDashboardResponse */
+        CountryDashboardResponse: {
+            country: components["schemas"]["CountryDashboardCountry"];
+            /** Time Series */
+            time_series: components["schemas"]["CountryDashboardSeriesPoint"][];
+            /** Moving Averages */
+            moving_averages: components["schemas"]["CountryDashboardMovingAverage"][];
+            data_quality: components["schemas"]["CountryDashboardQuality"];
+            latest_stats?: components["schemas"]["CountryDashboardLatestStats"] | null;
+        };
+        /** CountryDashboardSeriesPoint */
+        CountryDashboardSeriesPoint: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Daily Cases */
+            daily_cases: number;
+            /** Cumulative Cases */
+            cumulative_cases: number;
+            /** Daily Deaths */
+            daily_deaths: number;
+            /** Cumulative Deaths */
+            cumulative_deaths: number;
+            /** Data Quality Score */
+            data_quality_score?: number | null;
+        };
+        /** CountryResponse */
+        CountryResponse: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Iso Code */
+            iso_code: string;
+            /** Iso Code 2 */
+            iso_code_2?: string | null;
+            /** Region Id */
+            region_id?: number | null;
+            /** Population */
+            population?: number | null;
+            /** Latitude */
+            latitude?: number | null;
+            /** Longitude */
+            longitude?: number | null;
+        };
         /**
          * CountryStats
          * @description Country-level statistics
@@ -2290,6 +2395,21 @@ export interface components {
          * @enum {string}
          */
         DiagnosisType: "suspected" | "confirmed";
+        /** DiseaseResponse */
+        DiseaseResponse: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Code */
+            code: string;
+            /** Description */
+            description?: string | null;
+            /** Biosafety Level */
+            biosafety_level?: string | null;
+            /** Is Active */
+            is_active: boolean;
+        };
         /** Dispensation */
         Dispensation: {
             /** Prescription Id */
@@ -2312,6 +2432,15 @@ export interface components {
             prescription_id: number;
             /** Notes */
             notes?: string | null;
+        };
+        /** DistrictsResponse */
+        DistrictsResponse: {
+            /** Country Id */
+            country_id: number;
+            /** Province */
+            province: string;
+            /** Districts */
+            districts: string[];
         };
         /** Encounter */
         Encounter: {
@@ -2426,6 +2555,25 @@ export interface components {
              */
             public_visible: boolean;
         };
+        /** FacilityHeatmapPointResponse */
+        FacilityHeatmapPointResponse: {
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
+            /** Facility Code */
+            facility_code?: string | null;
+            /** Admin1 Code */
+            admin1_code?: string | null;
+            /** Admin2 Code */
+            admin2_code?: string | null;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /** Count */
+            count: number;
+        };
         /**
          * FacilityType
          * @enum {string}
@@ -2520,6 +2668,55 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** ImportBatchDetailResponse */
+        ImportBatchDetailResponse: {
+            /** Id */
+            id: number;
+            /** Filename */
+            filename: string;
+            /** Dataset Type */
+            dataset_type: string;
+            /** Status */
+            status?: string | null;
+            /** Rows Total */
+            rows_total: number;
+            /** Rows Valid */
+            rows_valid: number;
+            /** Rows Committed */
+            rows_committed: number;
+            /** Error Count */
+            error_count: number;
+            /** Warning Count */
+            warning_count: number;
+            /** Quality Score */
+            quality_score?: number | null;
+            /**
+             * Uploaded At
+             * Format: date-time
+             */
+            uploaded_at: string;
+            /** Committed At */
+            committed_at?: string | null;
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Issues */
+            issues: components["schemas"]["ImportRowIssueResponse"][];
+        };
+        /** ImportRowIssueResponse */
+        ImportRowIssueResponse: {
+            /** Row Number */
+            row_number: number;
+            /** Field Name */
+            field_name?: string | null;
+            /** Severity */
+            severity?: string | null;
+            /** Message */
+            message: string;
+            /** Raw Value */
+            raw_value?: string | null;
+        };
         /** InferentialRequest */
         InferentialRequest: {
             /** Test Type */
@@ -2551,6 +2748,105 @@ export interface components {
             batch_id?: number | null;
             /** Job Id */
             job_id?: number | null;
+        };
+        /** IngestionJobResponse */
+        IngestionJobResponse: {
+            /** Id */
+            id: number;
+            /** Job Type */
+            job_type: string;
+            /** Status */
+            status: string;
+            /** Attempts */
+            attempts: number;
+            /** Max Attempts */
+            max_attempts: number;
+            /**
+             * Available At
+             * Format: date-time
+             */
+            available_at: string;
+            /** Started At */
+            started_at?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Result */
+            result?: unknown | null;
+            /** Import Batch Id */
+            import_batch_id?: number | null;
+        };
+        /** InteropLogResponse */
+        InteropLogResponse: {
+            /** Id */
+            id: number;
+            /** System Name */
+            system_name: string;
+            /** Direction */
+            direction: string;
+            /** Status */
+            status: string;
+            /** Dataset Type */
+            dataset_type: string;
+            /**
+             * Timestamp
+             * Format: date-time
+             */
+            timestamp: string;
+            /** External Id */
+            external_id?: string | null;
+            /** Mapping Id */
+            mapping_id?: number | null;
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** LocationCountryResponse */
+        LocationCountryResponse: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Iso Code */
+            iso_code: string;
+            /** Provinces */
+            provinces: string[];
+            /** Districts */
+            districts: string[];
+            /** Facility Count */
+            facility_count: number;
+            /** Facilities */
+            facilities: components["schemas"]["LocationFacilityResponse"][];
+        };
+        /** LocationFacilityResponse */
+        LocationFacilityResponse: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
+            /** Province */
+            province?: string | null;
+            /** District */
+            district?: string | null;
+            /** Latitude */
+            latitude?: number | null;
+            /** Longitude */
+            longitude?: number | null;
+        };
+        /** LocationHierarchyResponse */
+        LocationHierarchyResponse: {
+            /** Region Id */
+            region_id: number;
+            /** Region Name */
+            region_name: string;
+            /** Region Code */
+            region_code: string;
+            /** Countries */
+            countries: components["schemas"]["LocationCountryResponse"][];
         };
         /** MfaCodeRequest */
         MfaCodeRequest: {
@@ -2717,6 +3013,49 @@ export interface components {
             /** Clinician Name */
             clinician_name?: string | null;
         };
+        /** ProvincesResponse */
+        ProvincesResponse: {
+            /** Country Id */
+            country_id: number;
+            /** Provinces */
+            provinces: string[];
+        };
+        /** ProvincialStatResponse */
+        ProvincialStatResponse: {
+            /** Province */
+            province: string;
+            /** Visit Count */
+            visit_count: number;
+        };
+        /** PublicAlertResponse */
+        PublicAlertResponse: {
+            /** Severity */
+            severity: string;
+            /** Message */
+            message: string;
+        };
+        /** PublicMapPointResponse */
+        PublicMapPointResponse: {
+            /** Type */
+            type: string;
+            /** Name */
+            name: string;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /** Count */
+            count: number;
+        };
+        /** PublicStatsResponse */
+        PublicStatsResponse: {
+            /** Total Visits Recorded */
+            total_visits_recorded: number;
+            /** Participating Facilities */
+            participating_facilities: number;
+            /** Alert Level */
+            alert_level: string;
+        };
         /**
          * ReportRequest
          * @description Request to generate a report
@@ -2807,6 +3146,34 @@ export interface components {
             owner?: string | null;
             /** Is Active */
             is_active: boolean;
+        };
+        /** SyndromicTrendResponse */
+        SyndromicTrendResponse: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Febrile Illness
+             * @default 0
+             */
+            febrile_illness: number;
+            /**
+             * Acute Respiratory
+             * @default 0
+             */
+            acute_respiratory: number;
+            /**
+             * Gastrointestinal
+             * @default 0
+             */
+            gastrointestinal: number;
+            /**
+             * Neurological
+             * @default 0
+             */
+            neurological: number;
         };
         /**
          * TimeSeriesPoint
@@ -3562,9 +3929,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["CountryResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -3595,9 +3960,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["CountryResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3630,9 +3993,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["DiseaseResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -3663,9 +4024,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["DiseaseResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3798,7 +4157,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ImportBatchDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4361,9 +4720,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["CountryDashboardResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4705,7 +5062,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SyndromicTrendResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -4734,7 +5091,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["FacilityHeatmapPointResponse"][];
                 };
             };
         };
@@ -4843,7 +5200,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["InteropLogResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -4948,7 +5305,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PublicStatsResponse"];
                 };
             };
         };
@@ -4968,7 +5325,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ProvincialStatResponse"][];
                 };
             };
         };
@@ -4988,7 +5345,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PublicMapPointResponse"][];
                 };
             };
         };
@@ -5008,7 +5365,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PublicAlertResponse"][];
                 };
             };
         };
@@ -5275,7 +5632,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["LocationHierarchyResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -5306,7 +5663,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ProvincesResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5338,7 +5695,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DistrictsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5521,7 +5878,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["IngestionJobResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5552,7 +5909,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["IngestionJobResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5583,7 +5940,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["IngestionJobResponse"];
                 };
             };
             /** @description Validation Error */

@@ -63,3 +63,49 @@ class CountryDashboardRequest(BaseModel):
     disease_id: Optional[int] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
+
+
+class CountryDashboardCountry(BaseModel):
+    id: int
+    name: str
+    iso_code: str
+    population: int | None = None
+
+
+class CountryDashboardSeriesPoint(BaseModel):
+    date: date
+    daily_cases: int
+    cumulative_cases: int
+    daily_deaths: int
+    cumulative_deaths: int
+    data_quality_score: float | None = None
+
+
+class CountryDashboardMovingAverage(BaseModel):
+    date: date
+    value: float
+
+
+class CountryDashboardQuality(BaseModel):
+    date_range_start: date
+    date_range_end: date
+    latest_data_date: date | None = None
+    reporting_lag_days: int | None = None
+    completeness: float
+    freshness_status: str
+
+
+class CountryDashboardLatestStats(BaseModel):
+    date: date
+    daily_cases: int
+    cumulative_cases: int
+    daily_deaths: int
+    cumulative_deaths: int
+
+
+class CountryDashboardResponse(BaseModel):
+    country: CountryDashboardCountry
+    time_series: list[CountryDashboardSeriesPoint]
+    moving_averages: list[CountryDashboardMovingAverage]
+    data_quality: CountryDashboardQuality
+    latest_stats: CountryDashboardLatestStats | None = None

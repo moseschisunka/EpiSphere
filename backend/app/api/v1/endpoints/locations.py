@@ -1,14 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 
 from app.core.database import get_db
 from app.db.models import Region, Country, Facility
+from app.schemas.operational import DistrictsResponse, LocationHierarchyResponse, ProvincesResponse
 
 router = APIRouter()
 
 
-@router.get("/hierarchy")
+@router.get("/hierarchy", response_model=List[LocationHierarchyResponse])
 def get_location_hierarchy(
     region_id: Optional[int] = None,
     country_id: Optional[int] = None,
@@ -67,7 +68,7 @@ def get_location_hierarchy(
     return result
 
 
-@router.get("/provinces")
+@router.get("/provinces", response_model=ProvincesResponse)
 def get_provinces_by_country(country_id: int, db: Session = Depends(get_db)):
     """List unique provinces/states for a given country."""
     facilities = db.query(Facility).filter(Facility.country_id == country_id).all()
@@ -75,7 +76,7 @@ def get_provinces_by_country(country_id: int, db: Session = Depends(get_db)):
     return {"country_id": country_id, "provinces": provinces}
 
 
-@router.get("/districts")
+@router.get("/districts", response_model=DistrictsResponse)
 def get_districts_by_province(country_id: int, province: str, db: Session = Depends(get_db)):
     """List districts in a specific province."""
     facilities = db.query(Facility).filter(

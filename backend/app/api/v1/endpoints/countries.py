@@ -7,11 +7,12 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.dependencies import get_current_active_user
 from app.db.models import Country
+from app.schemas.operational import CountryResponse
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[dict])
+@router.get("/", response_model=List[CountryResponse])
 async def list_countries(
     skip: int = 0,
     limit: int = 200,
@@ -34,7 +35,7 @@ async def list_countries(
     ]
 
 
-@router.get("/{country_id}", response_model=dict)
+@router.get("/{country_id}", response_model=CountryResponse)
 async def get_country(
     country_id: int,
     db: Session = Depends(get_db)

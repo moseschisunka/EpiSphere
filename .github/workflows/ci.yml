@@ -39,6 +39,38 @@ jobs:
         env:
           DATABASE_URL: sqlite:///./ci-migration.db
         run: alembic upgrade head
+      - name: Run legacy SQLite upgrade smoke test
+        env:
+          DATABASE_URL: sqlite:///./ci-legacy-migration.db
+        run: |
+          python - <<'PY'
+          import sqlite3
+
+          connection = sqlite3.connect("ci-legacy-migration.db")
+          connection.execute(
+              """
+              CREATE TABLE diseases (
+                id INTEGER PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                code VARCHAR(50),
+                description TEXT,
+                is_active BOOLEAN,
+                created_at DATETIME
+              )
+              """
+          )
+          connection.commit()
+          connection.close()
+          PY
+          alembic upgrade head
+          python - <<'PY'
+          import sqlite3
+
+          connection = sqlite3.connect("ci-legacy-migration.db")
+          columns = {row[1] for row in connection.execute("PRAGMA table_info(diseases)")}
+          assert "biosafety_level" in columns
+          assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0011_repair_legacy_disease_biosafety"
+          PY
 
   migrations-postgres:
     runs-on: ubuntu-latest
