@@ -82,6 +82,80 @@ test('facility administrator can review staff and change public-map consent', as
   await expect(page.getByRole('button', { name: 'Public map: enabled' })).toBeVisible()
 })
 
+test('country analyst can view a scoped country dashboard', async ({ page }) => {
+  await authenticated(page)
+  await page.route('**/api/v1/countries/1', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ id: 1, name: 'Zambia', iso_code: 'ZMB' }),
+  }))
+  await page.route('**/api/v1/diseases*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{ id: 1, name: 'Cholera' }]),
+  }))
+  await page.route('**/api/v1/dashboard/country/1*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      latest_stats: { daily_cases: 18, cumulative_cases: 120, daily_deaths: 1, cumulative_deaths: 4, date: '2026-08-12' },
+      time_series: [{ date: '2026-08-12', value: 18 }],
+      moving_averages: [{ date: '2026-08-12', value: 15 }],
+    }),
+  }))
+
+  await page.goto('/dashboard/country/1')
+  await expect(page.getByRole('heading', { name: 'Zambia Dashboard' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Daily Cases Time Series' })).toBeVisible()
+  await expect(page.getByText('18', { exact: true })).toBeVisible()
+})
+
+test('clinician can open a patient encounter workflow', async ({ page }) => {
+  await authenticated(page)
+  await page.route('**/api/v1/clinical/patients*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{ id: 12, mrn_display: 'MRN-0012', dob: '1990-04-01', gender: 'F' }]),
+  }))
+  await page.route('**/api/v1/diseases*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{ id: 1, name: 'Cholera' }]),
+  }))
+
+  await page.goto('/clinical')
+  await expect(page.getByRole('heading', { name: 'Clinical Desk' })).toBeVisible()
+  await expect(page.getByText('MRN-0012')).toBeVisible()
+  await page.getByRole('button', { name: 'New Visit' }).click()
+  await expect(page.getByRole('heading', { name: 'New Clinical Encounter' })).toBeVisible()
+})
+
+test('platform administrator can access the operations hub', async ({ page }) => {
+  await authenticated(page)
+  await page.route('**/api/v1/auth/me*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ id: 1, username: 'platform-admin', roles: ['admin'] }),
+  }))
+  await page.route('**/api/v1/news*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{
+      id: 44,
+      title: 'Cholera response update',
+      summary: 'Operational update for the current response.',
+      content: 'Operational update',
+      source: 'EpiSphere',
+      is_public: true,
+      published_at: '2026-08-12T00:00:00Z',
+    }]),
+  }))
+
+  await page.goto('/admin')
+  await expect(page.getByRole('heading', { name: 'System Control & Operations Hub' })).toBeVisible()
+  await expect(page.getByText('Cholera response update')).toBeVisible()
+})
+
 test('privileged login redirects to the MFA challenge', async ({ page }) => {
   await page.route('**/api/auth/login', (route) => route.fulfill({
     status: 200,
