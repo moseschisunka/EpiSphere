@@ -9,13 +9,12 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies.  Remove stale metadata
-# left by the base image/dependency resolver so runtime scanners inspect the
-# patched versions actually installed in this image.
+# Copy requirements and replace the base image's setuptools.  Its older
+# vendored packages contain known vulnerabilities even though EpiSphere does
+# not directly depend on them at runtime.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
-    && rm -rf /usr/local/lib/python3.11/site-packages/jaraco.context-5.3.0.dist-info \
-        /usr/local/lib/python3.11/site-packages/wheel-0.45.1.dist-info
+RUN pip install --no-cache-dir --upgrade setuptools==84.0.0 \
+    && pip install --no-cache-dir -r requirements.txt
 
 # Create a non-root user and group
 RUN groupadd -r episphere && useradd -r -g episphere episphere

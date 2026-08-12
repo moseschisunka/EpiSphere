@@ -20,9 +20,13 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Create a non-root user
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# The standalone server needs Node, but not npm or npx. Removing the package
+# manager prevents unused build tooling from expanding the runtime attack
+# surface or carrying its own dependency vulnerabilities into production.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx \
+    && addgroup --system --gid 1001 nodejs \
+    && adduser --system --uid 1001 nextjs
 
 # Copy only the necessary files for production
 COPY --from=builder /app/public ./public
