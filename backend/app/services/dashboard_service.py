@@ -245,9 +245,9 @@ class DashboardService:
         return "stale"
 
     @staticmethod
-    def get_facility_heatmap(db: Session) -> list:
-        """Get aggregated encounter counts per geocoded facility for heatmaps."""
-        results = db.query(
+    def get_facility_heatmap(db: Session, facility_id: int | None = None) -> list:
+        """Get aggregated encounter counts, optionally for one facility."""
+        query = db.query(
             Facility.name,
             Facility.type,
             Facility.location,
@@ -257,7 +257,10 @@ class DashboardService:
             Facility.admin1_code,
             Facility.admin2_code,
             func.count(Encounter.id).label("visit_count"),
-        ).join(Encounter).group_by(Facility.id).all()
+        ).join(Encounter)
+        if facility_id is not None:
+            query = query.filter(Facility.id == facility_id)
+        results = query.group_by(Facility.id).all()
 
         heatmap_data = []
         for row in results:

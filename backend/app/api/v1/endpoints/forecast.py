@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user, require_role
+from app.core.dependencies import apply_country_scope, enforce_country_scope, get_current_active_user, require_role
 from app.db.models import Forecast, User
 from app.schemas.forecast import ForecastResponse, ForecastRequest
 from app.services.forecast_service import ForecastService
@@ -20,6 +20,7 @@ async def generate_forecast(
     db: Session = Depends(get_db)
 ):
     """Generate a forecast for a country and disease"""
+    enforce_country_scope(current_user, forecast_request.country_id)
     service = ForecastService(db)
     
     try:
@@ -54,7 +55,7 @@ async def list_forecasts(
     db: Session = Depends(get_db)
 ):
     """List forecasts"""
-    query = db.query(Forecast)
+    query = apply_country_scope(db.query(Forecast), Forecast, current_user)
     
     if country_id:
         query = query.filter(Forecast.country_id == country_id)
@@ -82,7 +83,9 @@ async def get_forecast(
     db: Session = Depends(get_db)
 ):
     """Get forecast by ID"""
-    forecast = db.query(Forecast).filter(Forecast.id == forecast_id).first()
+    forecast = apply_country_scope(
+        db.query(Forecast).filter(Forecast.id == forecast_id), Forecast, current_user
+    ).first()
     if not forecast:
         raise HTTPException(status_code=404, detail="Forecast not found")
     

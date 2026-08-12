@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import require_role
+from app.core.dependencies import apply_country_scope, enforce_country_scope, require_role
 from app.db.models import Alert, AlertNotification, NotificationStatus, AlertStatus, User, AuditLog, AuditAction
 from app.schemas.alert import AlertNotificationResponse, AlertResponse, AlertReviewUpdate, AlertUpdate, AlertFilter
 from app.services.notification_service import AlertNotificationService
@@ -24,7 +24,8 @@ async def list_alert_notifications(
     db: Session = Depends(get_db),
 ):
     """List durable response-notification deliveries for operators."""
-    query = db.query(AlertNotification).order_by(AlertNotification.created_at.desc())
+    query = db.query(AlertNotification).join(Alert).order_by(AlertNotification.created_at.desc())
+    query = apply_country_scope(query, Alert, current_user)
     if status_filter:
         query = query.filter(AlertNotification.status == status_filter)
     return query.offset(skip).limit(min(limit, 500)).all()
@@ -37,9 +38,10 @@ async def retry_alert_notification(
     db: Session = Depends(get_db),
 ):
     """Requeue a failed delivery without changing the alert lifecycle."""
-    notification = db.query(AlertNotification).filter(AlertNotification.id == notification_id).first()
+    notification = db.query(AlertNotification).join(Alert).filter(AlertNotification.id == notification_id).first()
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
+    enforce_country_scope(current_user, notification.alert.country_id)
     if notification.status != NotificationStatus.FAILED:
         raise HTTPException(status_code=409, detail="Only failed notifications can be retried")
     notification.status = NotificationStatus.PENDING
@@ -69,7 +71,7 @@ async def list_alerts(
     db: Session = Depends(get_db)
 ):
     """List alerts with filters"""
-    query = db.query(Alert)
+    query = apply_country_scope(db.query(Alert), Alert, current_user)
     
     if country_id:
         query = query.filter(Alert.country_id == country_id)
@@ -102,7 +104,9 @@ async def get_alert(
     db: Session = Depends(get_db)
 ):
     """Get alert by ID"""
-    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    alert = apply_country_scope(
+        db.query(Alert).filter(Alert.id == alert_id), Alert, current_user
+    ).first()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
     
@@ -122,7 +126,9 @@ async def review_alert(
     db: Session = Depends(get_db),
 ):
     """Record an epidemiologist or administrator's human review decision."""
-    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    alert = apply_country_scope(
+        db.query(Alert).filter(Alert.id == alert_id), Alert, current_user
+    ).first()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
     alert.review_status = review_update.review_status
@@ -157,7 +163,9 @@ async def resolve_alert(
     db: Session = Depends(get_db)
 ):
     """Resolve or update alert status"""
-    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+    alert = apply_country_scope(
+        db.query(Alert).filter(Alert.id == alert_id), Alert, current_user
+    ).first()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
     
@@ -215,6 +223,8 @@ async def resolve_alert(
         assignee = db.query(User).filter(User.id == alert_update.assigned_to, User.is_active.is_(True)).first()
         if not assignee:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assigned user is not active or does not exist")
+        if assignee.country_id and assignee.country_id != alert.country_id and (not assignee.role or assignee.role.name != "admin"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assignee is outside the alert country scope")
         alert.assigned_to = assignee.id
     
     if alert_update.resolution_notes:

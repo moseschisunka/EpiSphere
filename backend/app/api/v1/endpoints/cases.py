@@ -7,7 +7,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user, require_role
+from app.core.dependencies import (
+    apply_country_scope,
+    enforce_country_scope,
+    get_current_active_user,
+    get_user_country_scope,
+    require_role,
+)
 from app.db.models import Case, Country, Disease, User, AuditLog, AuditAction, ImportBatch, ImportRowError
 from app.schemas.case import CaseCreate, CaseResponse, CaseUpdate, CaseBulkUpload, CaseStats, CaseUploadResult
 from app.services.case_service import CaseService
@@ -28,7 +34,7 @@ async def list_cases(
     db: Session = Depends(get_db)
 ):
     """List cases with filters"""
-    query = db.query(Case)
+    query = apply_country_scope(db.query(Case), Case, current_user)
     
     if country_id:
         query = query.filter(Case.country_id == country_id)
@@ -51,6 +57,7 @@ async def create_case(
 ):
     """Create a new case record"""
     # Verify country and disease exist
+    enforce_country_scope(current_user, case_data.country_id)
     country = db.query(Country).filter(Country.id == case_data.country_id).first()
     if not country:
         raise HTTPException(status_code=404, detail="Country not found")
@@ -105,6 +112,7 @@ async def upload_cases(
     db: Session = Depends(get_db)
 ):
     """Upload cases from CSV/Excel file"""
+    enforce_country_scope(current_user, country_id)
     upload_service = DataUploadService(db)
     result = await upload_service.upload_file(
         file=file,
@@ -128,6 +136,8 @@ async def get_import_batch(
     batch = db.query(ImportBatch).filter(ImportBatch.id == batch_id).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Import batch not found")
+    if batch.country_id is not None:
+        enforce_country_scope(current_user, batch.country_id)
 
     issues = db.query(ImportRowError).filter(ImportRowError.batch_id == batch_id).order_by(ImportRowError.row_number).all()
     return {
@@ -163,9 +173,17 @@ async def get_case_stats(
     disease_id: Optional[int] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """Get case statistics for dashboard"""
+    scoped_country_id = get_user_country_scope(current_user)
+    if scoped_country_id is not None:
+        if country_id is not None:
+            enforce_country_scope(current_user, country_id)
+        country_id = scoped_country_id
+    elif current_user.role and current_user.role.name in {"country_data_officer", "facility_admin", "clinician", "pharmacist"}:
+        enforce_country_scope(current_user, 0)
     service = CaseService(db)
     stats = service.get_case_stats(
         country_id=country_id,
@@ -183,7 +201,7 @@ async def get_case(
     db: Session = Depends(get_db)
 ):
     """Get case by ID"""
-    case = db.query(Case).filter(Case.id == case_id).first()
+    case = apply_country_scope(db.query(Case).filter(Case.id == case_id), Case, current_user).first()
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     return case
@@ -197,12 +215,14 @@ async def update_case(
     db: Session = Depends(get_db)
 ):
     """Update case record"""
-    case = db.query(Case).filter(Case.id == case_id).first()
+    case = apply_country_scope(db.query(Case).filter(Case.id == case_id), Case, current_user).first()
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     
     # Update fields
     update_data = case_update.dict(exclude_unset=True)
+    if "country_id" in update_data:
+        enforce_country_scope(current_user, update_data["country_id"])
     for field, value in update_data.items():
         setattr(case, field, value)
     
