@@ -158,7 +158,7 @@ test('platform administrator can access the operations hub', async ({ page }) =>
     contentType: 'application/json',
     body: JSON.stringify({ id: 1, username: 'platform-admin', roles: ['admin'] }),
   }))
-  await page.route('**/api/v1/news*', (route) => route.fulfill({
+  await page.route('**/api/v1/news/admin*', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify([{
