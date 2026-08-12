@@ -63,7 +63,12 @@ class DashboardService:
         data_completeness = min(observed_points / (expected_groups * expected_days), 1.0) if latest_rows else 0.0
 
         active_alerts = self.db.query(func.count(Alert.id)).filter(
-            Alert.status.in_([AlertStatus.TRIGGERED, AlertStatus.INVESTIGATING])
+            Alert.status.in_([
+                AlertStatus.TRIGGERED,
+                AlertStatus.ACKNOWLEDGED,
+                AlertStatus.INVESTIGATING,
+                AlertStatus.ESCALATED,
+            ])
         ).scalar() or 0
 
         global_stats = GlobalStats(
@@ -225,9 +230,9 @@ class DashboardService:
 
     def _alerts_summary(self) -> dict:
         return {
-            "low": self.db.query(func.count(Alert.id)).filter(Alert.severity == AlertSeverity.LOW, Alert.status.in_([AlertStatus.TRIGGERED, AlertStatus.INVESTIGATING])).scalar() or 0,
-            "moderate": self.db.query(func.count(Alert.id)).filter(Alert.severity == AlertSeverity.MODERATE, Alert.status.in_([AlertStatus.TRIGGERED, AlertStatus.INVESTIGATING])).scalar() or 0,
-            "high": self.db.query(func.count(Alert.id)).filter(Alert.severity == AlertSeverity.HIGH, Alert.status.in_([AlertStatus.TRIGGERED, AlertStatus.INVESTIGATING])).scalar() or 0,
+            "low": self.db.query(func.count(Alert.id)).filter(Alert.severity == AlertSeverity.LOW, Alert.status.in_([AlertStatus.TRIGGERED, AlertStatus.ACKNOWLEDGED, AlertStatus.INVESTIGATING, AlertStatus.ESCALATED])).scalar() or 0,
+            "moderate": self.db.query(func.count(Alert.id)).filter(Alert.severity == AlertSeverity.MODERATE, Alert.status.in_([AlertStatus.TRIGGERED, AlertStatus.ACKNOWLEDGED, AlertStatus.INVESTIGATING, AlertStatus.ESCALATED])).scalar() or 0,
+            "high": self.db.query(func.count(Alert.id)).filter(Alert.severity == AlertSeverity.HIGH, Alert.status.in_([AlertStatus.TRIGGERED, AlertStatus.ACKNOWLEDGED, AlertStatus.INVESTIGATING, AlertStatus.ESCALATED])).scalar() or 0,
         }
 
     def _freshness_status(self, lag_days: Optional[int]) -> str:

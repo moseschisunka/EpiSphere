@@ -2,6 +2,9 @@ import httpx
 import csv
 import io
 import ipaddress
+import json
+import hashlib
+import socket
 from datetime import datetime
 from sqlalchemy.orm import Session
 from typing import Dict, Any
@@ -13,11 +16,16 @@ from app.db.models import (
     ImportStatus,
     SourceSystem,
 )
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
+from app.core.config import settings
 
 class PublicDatasetService:
     MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
     REQUIRED_MAPPING_KEYS = {"country_iso", "date", "daily_cases"}
+
+    @staticmethod
+    def _source_record_id(*parts: Any) -> str:
+        return hashlib.sha256("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()
 
     @staticmethod
     def _validate_csv_mapping(mapping: Dict[str, str]) -> None:
@@ -33,6 +41,21 @@ class PublicDatasetService:
             for key, value in mapping.items()
         ):
             raise ValueError("CSV mapping keys and column names must be non-empty strings of 255 characters or fewer.")
+
+    @staticmethod
+    def _is_private_address(hostname: str) -> bool:
+        try:
+            address = ipaddress.ip_address(hostname)
+        except ValueError:
+            return False
+        return any((
+            address.is_private,
+            address.is_loopback,
+            address.is_link_local,
+            address.is_reserved,
+            address.is_multicast,
+            address.is_unspecified,
+        ))
 
     @staticmethod
     def _get_or_create_source_system(db: Session, code: str, name: str, system_type: str) -> SourceSystem:
@@ -75,15 +98,49 @@ class PublicDatasetService:
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             raise ValueError("Dataset URL must be an absolute HTTP(S) URL.")
-        hostname = parsed.hostname.lower()
-        if hostname in {"localhost", "localhost.localdomain"}:
-            raise ValueError("Local dataset URLs are not allowed.")
-        try:
-            address = ipaddress.ip_address(hostname)
-        except ValueError:
-            address = None
-        if address and (address.is_private or address.is_loopback or address.is_link_local or address.is_reserved):
+        hostname = parsed.hostname.lower().rstrip(".")
+        allowed_hosts = {host.lower().strip().rstrip(".") for host in settings.PUBLIC_DATASET_ALLOWED_HOSTS}
+        if hostname not in allowed_hosts:
+            raise ValueError("Dataset host is not in the approved public-source allowlist.")
+        if PublicDatasetService._is_private_address(hostname):
             raise ValueError("Private or local dataset addresses are not allowed.")
+        try:
+            resolved = socket.getaddrinfo(hostname, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
+        except (socket.gaierror, ValueError) as exc:
+            raise ValueError("Dataset host could not be resolved safely.") from exc
+        if not resolved or any(PublicDatasetService._is_private_address(info[4][0].split("%", 1)[0]) for info in resolved):
+            raise ValueError("Dataset host resolves to a private or local address.")
+
+    @classmethod
+    def _download_public_url(cls, url: str) -> tuple[bytes, str, Dict[str, str]]:
+        """Download a public source while validating every redirect and byte limit."""
+        current_url = url
+        for redirect_number in range(settings.PUBLIC_DATASET_MAX_REDIRECTS + 1):
+            cls._validate_public_url(current_url)
+            with httpx.Client(timeout=30.0, follow_redirects=False) as client:
+                with client.stream("GET", current_url, follow_redirects=False) as response:
+                    if response.is_redirect:
+                        location = response.headers.get("location")
+                        if not location:
+                            raise ValueError("Dataset redirect did not include a location.")
+                        if redirect_number >= settings.PUBLIC_DATASET_MAX_REDIRECTS:
+                            raise ValueError("Dataset exceeded the maximum redirect count.")
+                        current_url = urljoin(current_url, location)
+                        continue
+
+                    response.raise_for_status()
+                    content_length = response.headers.get("content-length")
+                    if content_length and int(content_length) > cls.MAX_DOWNLOAD_BYTES:
+                        raise ValueError("Dataset exceeds the 25 MB download limit.")
+                    chunks: list[bytes] = []
+                    total_bytes = 0
+                    for chunk in response.iter_bytes(64 * 1024):
+                        total_bytes += len(chunk)
+                        if total_bytes > cls.MAX_DOWNLOAD_BYTES:
+                            raise ValueError("Dataset exceeds the 25 MB download limit.")
+                        chunks.append(chunk)
+                    return b"".join(chunks), current_url, dict(response.headers)
+        raise ValueError("Dataset redirect handling failed.")
 
     @staticmethod
     def ingest_csv_url(
@@ -115,17 +172,23 @@ class PublicDatasetService:
             {"url": url, "mapping": mapping, "dry_run": dry_run},
         )
         try:
-            response = httpx.get(url, timeout=30.0)
-            response.raise_for_status()
-            if len(response.content) > PublicDatasetService.MAX_DOWNLOAD_BYTES:
-                raise ValueError("Dataset exceeds the 25 MB download limit.")
+            content, final_url, response_headers = PublicDatasetService._download_public_url(url)
+            if content.count(b"\n") > settings.PUBLIC_DATASET_MAX_ROWS + 1:
+                raise ValueError("Dataset exceeds the configured row limit.")
+            batch.batch_metadata = {
+                **(batch.batch_metadata or {}),
+                "final_url": final_url,
+                "content_length": len(content),
+                "content_type": response_headers.get("content-type"),
+                "sha256": hashlib.sha256(content).hexdigest(),
+            }
         except Exception as e:
             batch.status = ImportStatus.FAILED
             batch.error_count = 1
             db.commit()
             raise ValueError(f"Failed to fetch CSV: {str(e)}")
 
-        reader = csv.DictReader(io.StringIO(response.text))
+        reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
         rows_total = 0
         records_imported = 0
         errors = []
@@ -177,11 +240,13 @@ class PublicDatasetService:
                 daily_deaths = int(deaths_raw) if deaths_raw and str(deaths_raw).isdigit() else 0
 
                 if not dry_run:
+                    source_record_id = PublicDatasetService._source_record_id(
+                        "public_url", url, c_id, disease_id, record_date
+                    )
                     # Upsert logic
                     existing_case = db.query(Case).filter(
-                        Case.country_id == c_id,
-                        Case.disease_id == disease_id,
-                        Case.date == record_date
+                        Case.source_system_id == source_system.id,
+                        Case.source_record_id == source_record_id,
                     ).first()
 
                     if existing_case:
@@ -199,6 +264,7 @@ class PublicDatasetService:
                             daily_deaths=daily_deaths,
                             source=f"Public URL Ingest ({url})",
                             source_system_id=source_system.id,
+                            source_record_id=source_record_id,
                             import_batch_id=batch.id,
                         )
                         db.add(new_case)
@@ -253,9 +319,17 @@ class PublicDatasetService:
             {"indicator_code": indicator_code, "url": url, "dry_run": dry_run},
         )
         try:
-            response = httpx.get(url, timeout=30.0)
-            response.raise_for_status()
-            data = response.json()
+            content, final_url, response_headers = PublicDatasetService._download_public_url(url)
+            if len(content) > PublicDatasetService.MAX_DOWNLOAD_BYTES:
+                raise ValueError("Dataset exceeds the 25 MB download limit.")
+            batch.batch_metadata = {
+                **(batch.batch_metadata or {}),
+                "final_url": final_url,
+                "content_length": len(content),
+                "content_type": response_headers.get("content-type"),
+                "sha256": hashlib.sha256(content).hexdigest(),
+            }
+            data = json.loads(content.decode("utf-8"))
         except Exception as e:
             batch.status = ImportStatus.FAILED
             batch.error_count = 1
@@ -263,6 +337,11 @@ class PublicDatasetService:
             raise ValueError(f"Failed to fetch WHO data: {str(e)}")
 
         values = data.get("value", [])
+        if len(values) > settings.PUBLIC_DATASET_MAX_ROWS:
+            batch.status = ImportStatus.FAILED
+            batch.error_count = 1
+            db.commit()
+            raise ValueError("Dataset exceeds the configured row limit.")
         rows_total = len(values)
         records_imported = 0
         warnings = []
@@ -299,10 +378,12 @@ class PublicDatasetService:
                 daily_cases = int(numeric_val)
 
                 if not dry_run:
+                    source_record_id = PublicDatasetService._source_record_id(
+                        "who_gho", indicator_code, c_id, disease_id, record_date
+                    )
                     existing_case = db.query(Case).filter(
-                        Case.country_id == c_id,
-                        Case.disease_id == disease_id,
-                        Case.date == record_date
+                        Case.source_system_id == source_system.id,
+                        Case.source_record_id == source_record_id,
                     ).first()
 
                     if existing_case:
@@ -318,6 +399,7 @@ class PublicDatasetService:
                             daily_cases=daily_cases,
                             source="WHO GHO API",
                             source_system_id=source_system.id,
+                            source_record_id=source_record_id,
                             import_batch_id=batch.id,
                         )
                         db.add(new_case)

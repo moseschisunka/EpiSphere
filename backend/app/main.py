@@ -3,7 +3,11 @@ EpiSphere AI - Main FastAPI Application
 Production-ready global public health surveillance platform
 """
 
-from fastapi import FastAPI, HTTPException
+import time
+from uuid import uuid4
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from contextlib import asynccontextmanager
@@ -18,6 +22,7 @@ from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.logger import setup_logging
 from app.core.database import SessionLocal
+from app.core.metrics import request_metrics
 from app.api.v1.api import api_router
 
 logger = setup_logging()
@@ -47,6 +52,29 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+
+@app.middleware("http")
+async def request_context_middleware(request: Request, call_next):
+    supplied_request_id = request.headers.get("X-Request-ID", "").strip()
+    request_id = supplied_request_id if 0 < len(supplied_request_id) <= 128 and supplied_request_id.isprintable() else str(uuid4())
+    request.state.request_id = request_id
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        elapsed = time.perf_counter() - started
+        request_metrics.observe(request.method, request.url.path, 500, elapsed)
+        logger.exception("request failed", extra={"request_id": request_id})
+        raise
+    elapsed = time.perf_counter() - started
+    request_metrics.observe(request.method, request.url.path, response.status_code, elapsed)
+    response.headers["X-Request-ID"] = request_id
+    logger.info(
+        "request completed",
+        extra={"request_id": request_id, "status_code": response.status_code, "elapsed_seconds": round(elapsed, 6)},
+    )
+    return response
 
 # CORS middleware
 app.add_middleware(
@@ -95,3 +123,9 @@ def readiness_check():
         logger.error("Readiness check failed: %s", exc)
         raise HTTPException(status_code=503, detail="Database is not ready") from exc
     return {"status": "ready"}
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics_endpoint():
+    """Expose low-cardinality pilot metrics for a local collector."""
+    return PlainTextResponse(request_metrics.render_prometheus(), media_type="text/plain; version=0.0.4")

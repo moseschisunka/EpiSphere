@@ -1,0 +1,119 @@
+{
+  "name": "EpiSphere - Public Dataset Ingestion (Daily)",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": false
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "dataset-schedule",
+      "name": "Daily schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        260,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dataset-url",
+              "name": "url",
+              "type": "string",
+              "value": "https://raw.githubusercontent.com/ORG/REPO/main/data.csv"
+            },
+            {
+              "id": "dataset-disease-id",
+              "name": "disease_id",
+              "type": "number",
+              "value": 2
+            },
+            {
+              "id": "dataset-mapping",
+              "name": "mapping",
+              "type": "object",
+              "value": "{\"country_iso\":\"Country\",\"date\":\"Date\",\"daily_cases\":\"Cases\",\"daily_deaths\":\"Deaths\"}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "dataset-config",
+      "name": "Configure approved dataset",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:8000/api/v1/datasets/ingest-csv",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "__SET_FROM_ENCRYPTED_N8N_DATASET_CREDENTIAL__"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"url\": $json.url, \"disease_id\": $json.disease_id, \"mapping\": $json.mapping, \"dry_run\": true}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "dataset-ingest",
+      "name": "Validate dataset in EpiSphere",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        760,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily schedule": {
+      "main": [
+        [
+          {
+            "node": "Configure approved dataset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configure approved dataset": {
+      "main": [
+        [
+          {
+            "node": "Validate dataset in EpiSphere",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

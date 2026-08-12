@@ -41,7 +41,7 @@ def get_news_article(article_id: int, db: Session = Depends(get_db)):
     return article
 
 
-from app.core.dependencies import get_agent_or_admin
+from app.core.dependencies import get_news_agent_or_admin
 
 @router.post("", response_model=news_schema.NewsArticle)
 @limiter.limit("30/minute")
@@ -49,7 +49,7 @@ def create_news_article(
     request: Request,
     article_in: news_schema.NewsArticleCreate,
     db: Session = Depends(get_db),
-    agent_or_admin = Depends(get_agent_or_admin)
+    agent_or_admin = Depends(get_news_agent_or_admin)
 ):
     """Create a new health news article (Admin or Agent only)."""
     article = NewsArticle(
@@ -74,6 +74,7 @@ def create_news_article(
         details={
             "actor": actor.name if actor else "admin",
             "auth_method": actor.auth_method if actor else "bearer",
+            "request_id": getattr(request.state, "request_id", None),
         },
     ))
     db.commit()

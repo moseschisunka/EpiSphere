@@ -146,9 +146,10 @@ class ServicePrincipal:
     name: str
     auth_method: str
 
-def get_agent_or_admin(
+def _get_agent_or_admin(
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session,
+    scope: str | None = None,
 ):
     """
     Dependency that allows access if EITHER:
@@ -160,9 +161,16 @@ def get_agent_or_admin(
     
     # 1. Check API Key
     api_key = request.headers.get("x-api-key")
-    configured_key = settings.AGENT_API_KEY
+    scoped_key = {
+        "news": settings.NEWS_AGENT_API_KEY,
+        "datasets": settings.DATASET_AGENT_API_KEY,
+    }.get(scope)
+    configured_key = scoped_key or settings.AGENT_API_KEY
     if api_key and configured_key and hmac.compare_digest(api_key, configured_key):
-        return ServicePrincipal(name="n8n", auth_method="x-api-key")
+        return ServicePrincipal(
+            name=f"n8n-{scope}" if scope else "n8n",
+            auth_method="x-api-key",
+        )
 
     # 2. Check JWT Bearer
     auth_header = request.headers.get("authorization")
@@ -185,3 +193,15 @@ def get_agent_or_admin(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Valid X-API-Key or Admin Bearer token required",
     )
+
+
+def get_agent_or_admin(request: Request, db: Session = Depends(get_db)):
+    return _get_agent_or_admin(request, db)
+
+
+def get_news_agent_or_admin(request: Request, db: Session = Depends(get_db)):
+    return _get_agent_or_admin(request, db, scope="news")
+
+
+def get_dataset_agent_or_admin(request: Request, db: Session = Depends(get_db)):
+    return _get_agent_or_admin(request, db, scope="datasets")

@@ -107,8 +107,16 @@ export default function AlertsPage() {
         )
       case 'investigating':
         return <span className="px-3 py-1 rounded-full text-xs font-bold border bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-900/30 dark:text-sky-300 dark:border-sky-800/50">INVESTIGATING</span>
+      case 'acknowledged':
+        return <span className="px-3 py-1 rounded-full text-xs font-bold border bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800/50">ACKNOWLEDGED</span>
+      case 'escalated':
+        return <span className="px-3 py-1 rounded-full text-xs font-bold border bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800/50">ESCALATED</span>
       case 'resolved':
         return <span className="px-3 py-1 rounded-full text-xs font-bold border bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800/50">RESOLVED</span>
+      case 'false_positive':
+        return <span className="px-3 py-1 rounded-full text-xs font-bold border bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">FALSE POSITIVE</span>
+      case 'closed':
+        return <span className="px-3 py-1 rounded-full text-xs font-bold border bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">CLOSED</span>
       default:
         return <span className="px-3 py-1 rounded-full text-xs font-bold border bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">{status?.toUpperCase()}</span>
     }
@@ -278,7 +286,7 @@ export default function AlertsPage() {
                   </Link>
                 </div>
 
-                {alert.status !== 'resolved' && alert.status !== 'false_positive' && (
+                {alert.status !== 'resolved' && alert.status !== 'false_positive' && alert.status !== 'closed' && (
                   <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-100 dark:border-slate-800">
                     {alert.status === 'triggered' && (
                       <button
@@ -288,6 +296,26 @@ export default function AlertsPage() {
                         className="px-3 py-2 rounded-lg bg-sky-600 text-white text-xs font-bold hover:bg-sky-700 disabled:opacity-50"
                       >
                         {updatingAlertId === alert.id ? 'Updating…' : 'Start investigation'}
+                      </button>
+                    )}
+                    {alert.status === 'triggered' && (
+                      <button
+                        type="button"
+                        onClick={() => updateAlert(alert.id, 'acknowledged')}
+                        disabled={updatingAlertId === alert.id}
+                        className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        Acknowledge
+                      </button>
+                    )}
+                    {(alert.status === 'acknowledged' || alert.status === 'investigating') && (
+                      <button
+                        type="button"
+                        onClick={() => updateAlert(alert.id, 'escalated')}
+                        disabled={updatingAlertId === alert.id}
+                        className="px-3 py-2 rounded-lg bg-orange-600 text-white text-xs font-bold hover:bg-orange-700 disabled:opacity-50"
+                      >
+                        Escalate
                       </button>
                     )}
                     <button

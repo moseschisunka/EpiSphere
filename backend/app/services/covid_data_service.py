@@ -4,6 +4,7 @@ import httpx
 import pandas as pd
 import math
 import io
+import hashlib
 from datetime import datetime
 from typing import Dict, Any
 
@@ -104,6 +105,9 @@ class CovidDataService:
                     "daily_deaths": daily_deaths,
                     "cumulative_deaths": cumulative_deaths,
                     "source_system_id": source_system.id,
+                    "source_record_id": hashlib.sha256(
+                        f"owid_covid19|{country_id}|{disease.id}|{pd.to_datetime(row['date']).date().isoformat()}".encode("utf-8")
+                    ).hexdigest(),
                     "import_batch_id": batch.id,
                     "reporting_level": "national",
                     "data_quality_score": 100.0,
@@ -196,10 +200,9 @@ class CovidDataService:
     async def _upsert_case_async(self, record):
         res = await self.db.execute(
             select(Case).filter_by(
-                country_id=record['country_id'],
-                disease_id=record['disease_id'],
-                date=record['date']
-            ).filter(Case.subnational_region.is_(None))
+                source_system_id=record['source_system_id'],
+                source_record_id=record['source_record_id'],
+            )
         )
         case = res.scalar_one_or_none()
         
@@ -211,10 +214,9 @@ class CovidDataService:
 
     def _upsert_case_sync(self, record):
         case = self.db.query(Case).filter_by(
-            country_id=record['country_id'],
-            disease_id=record['disease_id'],
-            date=record['date']
-        ).filter(Case.subnational_region.is_(None)).first()
+            source_system_id=record['source_system_id'],
+            source_record_id=record['source_record_id'],
+        ).first()
         
         if case:
             for k, v in record.items():

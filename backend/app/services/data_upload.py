@@ -1,6 +1,7 @@
 """Data upload, lineage, and validation service."""
 
 import io
+import hashlib
 from typing import Dict, Any, Optional
 from datetime import datetime, date
 
@@ -91,6 +92,7 @@ class DataUploadService:
             batch_metadata={
                 "columns": list(df.columns),
                 "commit_requested": commit,
+                "sha256": hashlib.sha256(contents).hexdigest(),
                 "country": country.iso_code,
                 "disease": disease.name,
             },
@@ -106,7 +108,9 @@ class DataUploadService:
         if missing_columns:
             issues.append(self._issue(batch.id, 1, None, QualitySeverity.ERROR, f"Missing required columns: {', '.join(missing_columns)}"))
         else:
-            validated_cases, issues = self._validate_rows(df, batch, country_id, disease_id, source_system.id)
+            validated_cases, issues = self._validate_rows(
+                df, batch, country_id, disease_id, source_system.id, source_system.code
+            )
             quality_checks = self._build_quality_checks(batch.id, df, validated_cases, issues)
 
         errors = [issue for issue in issues if issue.severity == QualitySeverity.ERROR]
@@ -197,6 +201,7 @@ class DataUploadService:
         country_id: int,
         disease_id: int,
         source_system_id: int,
+        source_system_code: str,
     ) -> tuple[list[Case], list[ImportRowError]]:
         issues: list[ImportRowError] = []
         cases: list[Case] = []
@@ -269,6 +274,9 @@ class DataUploadService:
                 subnational_region=subnational_region,
                 source=self._optional_text(row.get("source")) or batch.filename,
                 source_system_id=source_system_id,
+                source_record_id=hashlib.sha256(
+                    f"{source_system_code}|{batch.filename}|{country_id}|{disease_id}|{date_value.isoformat()}|{subnational_region or ''}".encode("utf-8")
+                ).hexdigest(),
                 import_batch_id=batch.id,
                 reporting_period_start=reporting_period_start,
                 reporting_period_end=reporting_period_end,
@@ -284,21 +292,27 @@ class DataUploadService:
     def _commit_cases(self, cases: list[Case]) -> int:
         committed = 0
         for case in cases:
-            existing_query = self.db.query(Case).filter(
-                Case.country_id == case.country_id,
-                Case.disease_id == case.disease_id,
-                Case.date == case.date,
-            )
-            if case.subnational_region:
-                existing_query = existing_query.filter(Case.subnational_region == case.subnational_region)
+            if case.source_system_id and case.source_record_id:
+                existing_query = self.db.query(Case).filter(
+                    Case.source_system_id == case.source_system_id,
+                    Case.source_record_id == case.source_record_id,
+                )
             else:
-                existing_query = existing_query.filter(Case.subnational_region.is_(None))
+                existing_query = self.db.query(Case).filter(
+                    Case.country_id == case.country_id,
+                    Case.disease_id == case.disease_id,
+                    Case.date == case.date,
+                )
+                if case.subnational_region:
+                    existing_query = existing_query.filter(Case.subnational_region == case.subnational_region)
+                else:
+                    existing_query = existing_query.filter(Case.subnational_region.is_(None))
 
             existing = existing_query.first()
             if existing:
                 for field in [
                     "daily_cases", "cumulative_cases", "daily_deaths", "cumulative_deaths",
-                    "daily_recovered", "cumulative_recovered", "source", "source_system_id",
+                    "daily_recovered", "cumulative_recovered", "source", "source_system_id", "source_record_id",
                     "import_batch_id", "reporting_period_start", "reporting_period_end",
                     "reporting_level", "case_definition", "confirmation_status", "data_quality_score", "notes",
                 ]:

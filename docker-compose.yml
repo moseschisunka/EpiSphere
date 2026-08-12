@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # PostgreSQL with TimescaleDB extension
   postgres:
-    image: timescale/timescaledb:latest-pg15
+    image: ${POSTGRES_IMAGE:-timescale/timescaledb:2.17.2-pg15}
     container_name: episphere_postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-episphere}
@@ -21,7 +21,7 @@ services:
 
   # Redis for caching and background jobs
   redis:
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE:-redis:7.2.5-alpine}
     container_name: episphere_redis
     ports:
       - "6379:6379"
@@ -47,6 +47,9 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
       CORS_ORIGINS: http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001
       AGENT_API_KEY: ${AGENT_API_KEY:-}
+      NEWS_AGENT_API_KEY: ${NEWS_AGENT_API_KEY:-}
+      DATASET_AGENT_API_KEY: ${DATASET_AGENT_API_KEY:-}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-}
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')\""]
       interval: 10s
@@ -78,7 +81,7 @@ services:
 
   # n8n Orchestrator for automated scraping
   n8n:
-    image: n8nio/n8n
+    image: ${N8N_IMAGE:-n8nio/n8n:1.88.0}
     container_name: episphere_n8n
     restart: always
     ports:

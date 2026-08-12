@@ -40,6 +40,37 @@ jobs:
           DATABASE_URL: sqlite:///./ci-migration.db
         run: alembic upgrade head
 
+  migrations-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15.8-alpine
+        env:
+          POSTGRES_USER: episphere
+          POSTGRES_PASSWORD: episphere
+          POSTGRES_DB: episphere_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U episphere -d episphere_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install migration dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Run PostgreSQL migration smoke test
+        env:
+          DATABASE_URL: postgresql://episphere:episphere@localhost:5432/episphere_ci
+        run: alembic upgrade head
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -69,6 +100,8 @@ jobs:
         env:
           SECRET_KEY: ci-only-secret
           AGENT_API_KEY: ci-only-agent-key
+          NEWS_AGENT_API_KEY: ci-only-news-key
+          DATASET_AGENT_API_KEY: ci-only-dataset-key
           N8N_ENCRYPTION_KEY: ci-only-n8n-key
         run: docker compose config --quiet
 
@@ -91,3 +124,7 @@ jobs:
       - name: Audit frontend dependencies
         working-directory: frontend
         run: npm ci && npm audit --audit-level=high
+      - name: Scan repository for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -53,6 +53,8 @@ def test_exponential_smoothing_forecasting():
     assert len(result["forecast_data"]["lower_bound"]) == 10
     assert len(result["forecast_data"]["upper_bound"]) == 10
     assert "exp_smoothing" in result["accuracy_metrics"]["candidate_models"]
+    assert "mean_bias" in result["accuracy_metrics"]["rolling_backtest"]["exp_smoothing"]
+    assert "mae_stability" in result["accuracy_metrics"]["rolling_backtest"]["exp_smoothing"]
 
 
 def test_forecast_request_bounds_and_model_allowlist():

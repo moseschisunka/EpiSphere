@@ -1,8 +1,10 @@
 # n8n Autonomous Agent Workflows
 
 These workflows call EpiSphere through the `X-API-Key` header. Set
-`AGENT_API_KEY` in the backend environment and store the same value in an n8n
-credential. Never commit the key in a workflow export or this repository.
+`NEWS_AGENT_API_KEY` and `DATASET_AGENT_API_KEY` in the backend environment and
+store each value in its matching encrypted n8n credential. Never commit a key
+in a workflow export or this repository. Importable templates live in
+`n8n/workflows/`.
 
 ## Global health news scraper
 
@@ -13,7 +15,7 @@ credential. Never commit the key in a workflow export or this repository.
    - Method: `POST`
    - URL: `http://backend:8000/api/v1/news`
    - Header: `X-API-Key` from the n8n credential
-   - Body: `title`, `summary`, `source`, and `is_public: true`
+   - Body: `title`, `summary`, `content`, `source`, and `is_public: true`
 
 ## Universal public dataset scraper
 

@@ -1,10 +1,12 @@
 import pytest
+import socket
 from unittest.mock import patch, MagicMock
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.db.models import Base
 from app.services.public_dataset_service import PublicDatasetService
 from app.db.models import Country, Disease, Case, ImportBatch, SourceSystem, ImportStatus
+from app.core.config import settings
 
 @pytest.fixture
 def make_session():
@@ -36,11 +38,14 @@ UNKNOWN,2023-01-03,10,0
         "daily_deaths": "Deaths"
     }
 
-    with patch("httpx.get") as mock_get:
-        mock_response = MagicMock()
-        mock_response.text = mock_csv_content
-        mock_response.raise_for_status.return_value = None
-        mock_get.return_value = mock_response
+    with patch.object(
+        PublicDatasetService,
+        "_download_public_url",
+        return_value=(mock_csv_content.encode(), "http://test.com/data.csv", {"content-type": "text/csv"}),
+    ), patch.object(settings, "PUBLIC_DATASET_ALLOWED_HOSTS", ["test.com"]), patch(
+        "socket.getaddrinfo",
+        return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 80))],
+    ):
 
         result = PublicDatasetService.ingest_csv_url(
             db=db,
@@ -81,11 +86,18 @@ def test_ingest_who_gho_success(make_session):
         ]
     }
 
-    with patch("httpx.get") as mock_get:
-        mock_response = MagicMock()
-        mock_response.json.return_value = mock_who_data
-        mock_response.raise_for_status.return_value = None
-        mock_get.return_value = mock_response
+    with patch.object(
+        PublicDatasetService,
+        "_download_public_url",
+        return_value=(
+            b'{"value": [{"SpatialDim": "ZMB", "TimeDim": "2023", "NumericValue": "1000"}, {"SpatialDim": "ZMB", "TimeDim": "2024", "NumericValue": "500"}, {"SpatialDim": "XYZ", "TimeDim": "2024", "NumericValue": "10"}]}',
+            "https://ghoapi.azureedge.net/api/CHOLERA_TEST",
+            {"content-type": "application/json"},
+        ),
+    ), patch.object(settings, "PUBLIC_DATASET_ALLOWED_HOSTS", ["ghoapi.azureedge.net"]), patch(
+        "socket.getaddrinfo",
+        return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
+    ):
 
         result = PublicDatasetService.ingest_who_gho(
             db=db,
@@ -105,12 +117,103 @@ def test_ingest_who_gho_success(make_session):
         assert batch.batch_metadata["indicator_code"] == "CHOLERA_TEST"
 
 
+def test_reprocessing_same_public_source_is_idempotent(make_session):
+    db = make_session
+    country = Country(name="Zambia", iso_code="ZMB", iso_code_2="ZM")
+    disease = Disease(name="Cholera", code="A00")
+    db.add_all([country, disease])
+    db.commit()
+    csv_content = b"Country,Date,Cases\nZMB,2023-01-01,50\n"
+    mapping = {"country_iso": "Country", "date": "Date", "daily_cases": "Cases"}
+
+    with patch.object(
+        PublicDatasetService,
+        "_download_public_url",
+        return_value=(csv_content, "https://test.com/data.csv", {"content-type": "text/csv"}),
+    ), patch.object(settings, "PUBLIC_DATASET_ALLOWED_HOSTS", ["test.com"]), patch(
+        "socket.getaddrinfo",
+        return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
+    ):
+        first = PublicDatasetService.ingest_csv_url(db, "https://test.com/data.csv", mapping, disease.id)
+        second = PublicDatasetService.ingest_csv_url(db, "https://test.com/data.csv", mapping, disease.id)
+
+    assert first["records_imported"] == second["records_imported"] == 1
+    cases = db.query(Case).filter(Case.disease_id == disease.id).all()
+    assert len(cases) == 1
+    assert db.query(ImportBatch).count() == 2
+
+
 def test_ingest_csv_requires_core_mapping(make_session):
     with pytest.raises(ValueError, match="missing required keys"):
-        PublicDatasetService.ingest_csv_url(
-            db=make_session,
-            url="http://test.com/data.csv",
-            mapping={"country_iso": "Country"},
-            disease_id=1,
-            dry_run=True,
-        )
+        PublicDatasetService._validate_csv_mapping({"country_iso": "Country"})
+
+
+def test_public_dataset_rejects_unapproved_host(monkeypatch):
+    monkeypatch.setattr(settings, "PUBLIC_DATASET_ALLOWED_HOSTS", ["raw.githubusercontent.com"])
+
+    with pytest.raises(ValueError, match="approved public-source allowlist"):
+        PublicDatasetService._validate_public_url("https://example.com/data.csv")
+
+
+class FakeStreamResponse:
+    def __init__(self, *, status_code=200, headers=None, chunks=None):
+        self.status_code = status_code
+        self.headers = headers or {}
+        self._chunks = chunks or []
+
+    @property
+    def is_redirect(self):
+        return 300 <= self.status_code < 400
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise ValueError("HTTP failure")
+
+    def iter_bytes(self, _chunk_size):
+        yield from self._chunks
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+
+class FakeStreamClient:
+    def __init__(self, response):
+        self.response = response
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def stream(self, *_args, **_kwargs):
+        return self.response
+
+
+def test_download_revalidates_redirect_targets(monkeypatch):
+    monkeypatch.setattr(settings, "PUBLIC_DATASET_ALLOWED_HOSTS", ["raw.githubusercontent.com"])
+    monkeypatch.setattr(
+        "socket.getaddrinfo",
+        lambda *_args, **_kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
+    )
+    redirect = FakeStreamResponse(status_code=302, headers={"location": "http://127.0.0.1/private"})
+    monkeypatch.setattr("app.services.public_dataset_service.httpx.Client", lambda **_kwargs: FakeStreamClient(redirect))
+
+    with pytest.raises(ValueError):
+        PublicDatasetService._download_public_url("https://raw.githubusercontent.com/org/data.csv")
+
+
+def test_download_stops_when_stream_exceeds_byte_limit(monkeypatch):
+    monkeypatch.setattr(settings, "PUBLIC_DATASET_ALLOWED_HOSTS", ["raw.githubusercontent.com"])
+    monkeypatch.setattr(
+        "socket.getaddrinfo",
+        lambda *_args, **_kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
+    )
+    response = FakeStreamResponse(chunks=[b"x" * (PublicDatasetService.MAX_DOWNLOAD_BYTES + 1)])
+    monkeypatch.setattr("app.services.public_dataset_service.httpx.Client", lambda **_kwargs: FakeStreamClient(response))
+
+    with pytest.raises(ValueError, match="25 MB download limit"):
+        PublicDatasetService._download_public_url("https://raw.githubusercontent.com/org/data.csv")

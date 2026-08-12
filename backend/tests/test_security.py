@@ -3,8 +3,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from starlette.requests import Request
 
-from app.core.config import settings
-from app.core.dependencies import ServicePrincipal, get_agent_or_admin
+from app.core.config import Settings, settings
+from app.core.dependencies import ServicePrincipal, get_agent_or_admin, get_news_agent_or_admin
 from app.core.security import create_access_token
 from app.db.models import Base, Role, User
 from app.schemas.public_datasets import WhoGhoIngestRequest
@@ -34,6 +34,20 @@ def test_agent_api_key_returns_explicit_service_principal(monkeypatch):
     assert isinstance(principal, ServicePrincipal)
     assert principal.name == "n8n"
     assert principal.auth_method == "x-api-key"
+    db.close()
+
+
+def test_news_agent_key_is_scoped_and_separately_identified(monkeypatch):
+    db = make_session()
+    monkeypatch.setattr(settings, "AGENT_API_KEY", "legacy-secret")
+    monkeypatch.setattr(settings, "NEWS_AGENT_API_KEY", "news-secret")
+
+    principal = get_news_agent_or_admin(make_request({"X-API-Key": "news-secret"}), db)
+    assert principal.name == "n8n-news"
+
+    with pytest.raises(Exception) as exc_info:
+        get_news_agent_or_admin(make_request({"X-API-Key": "legacy-secret"}), db)
+    assert exc_info.value.status_code == 401
     db.close()
 
 
@@ -99,3 +113,14 @@ def test_who_indicator_code_rejects_path_injection_shape():
 def test_who_ingest_rejects_non_positive_disease_id():
     with pytest.raises(ValueError):
         WhoGhoIngestRequest(indicator_code="CHOLERA_0001", disease_id=0)
+
+
+def test_production_settings_fail_closed_without_integration_secrets():
+    with pytest.raises(ValueError, match="NEWS_AGENT_API_KEY"):
+        Settings(
+            ENVIRONMENT="production",
+            SECRET_KEY="a-real-production-secret",
+            NEWS_AGENT_API_KEY="",
+            DATASET_AGENT_API_KEY="",
+            N8N_ENCRYPTION_KEY="",
+        )

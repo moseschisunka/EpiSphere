@@ -1,11 +1,26 @@
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional
 import re
+import hashlib
+import json
+import time
 
 import httpx
 
 from app.core.config import settings
-from app.db.models import InteropLog, InteropDirection, InteropStatus, User, DHIS2Mapping, Case
+from app.db.models import (
+    Case,
+    Country,
+    Disease,
+    DHIS2Mapping,
+    ImportBatch,
+    ImportStatus,
+    InteropDirection,
+    InteropLog,
+    InteropStatus,
+    SourceSystem,
+    User,
+)
 from datetime import datetime
 
 class InteropService:
@@ -14,6 +29,24 @@ class InteropService:
         "event": ["events"],
         "tracker": ["trackedEntityInstances"],
     }
+
+    @staticmethod
+    def _payload_hash(payload: Dict[str, Any]) -> str:
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _request_with_retry(method: str, endpoint: str, *, attempts: int, **kwargs):
+        last_error = None
+        for attempt in range(max(1, attempts)):
+            try:
+                response = getattr(httpx, method)(endpoint, **kwargs)
+                response.raise_for_status()
+                return response, attempt + 1
+            except Exception as exc:
+                last_error = exc
+                if attempt + 1 < max(1, attempts):
+                    time.sleep(min(2 ** attempt, 4))
+        raise last_error
 
     @staticmethod
     def sync_to_dhis2(
@@ -30,6 +63,24 @@ class InteropService:
             errors = InteropService._validate_payload(payload, mapping)
 
         endpoint_path = mapping.endpoint_path if mapping else dataset.strip("/")
+        payload_hash = InteropService._payload_hash(payload)
+        if not dry_run:
+            recent_successes = db.query(InteropLog).filter(
+                InteropLog.system_name == "DHIS2",
+                InteropLog.direction == InteropDirection.OUTBOUND,
+                InteropLog.status == InteropStatus.SUCCESS,
+            ).order_by(InteropLog.timestamp.desc()).limit(100).all()
+            for previous in recent_successes:
+                if (previous.details or {}).get("payload_hash") == payload_hash and (previous.details or {}).get("dataset") == dataset:
+                    return {
+                        "success": True,
+                        "status": previous.status.value,
+                        "log_id": previous.id,
+                        "dry_run": False,
+                        "errors": [],
+                        "message": "DHIS2 payload already exchanged; returning the previous successful log.",
+                        "replayed": True,
+                    }
         log = InteropLog(
             system_name="DHIS2",
             direction=InteropDirection.OUTBOUND,
@@ -41,6 +92,8 @@ class InteropService:
                 "payload_size": len(str(payload)),
                 "mapping": mapping.dataset if mapping else "default_shape_validation",
                 "dry_run_requested": dry_run,
+                "dataset": dataset,
+                "payload_hash": payload_hash,
             },
         )
         db.add(log)
@@ -82,13 +135,14 @@ class InteropService:
             if settings.DHIS2_USERNAME and settings.DHIS2_PASSWORD:
                 auth = (settings.DHIS2_USERNAME, settings.DHIS2_PASSWORD)
 
-            response = httpx.post(
+            response, attempts = InteropService._request_with_retry(
+                "post",
                 endpoint,
                 json=payload,
                 auth=auth,
                 timeout=settings.DHIS2_TIMEOUT_SECONDS,
+                attempts=settings.DHIS2_MAX_RETRIES,
             )
-            response.raise_for_status()
             log.status = InteropStatus.SUCCESS
             log.external_id = response.headers.get("Location") or response.headers.get("X-Request-ID")
             log.details = {
@@ -96,6 +150,7 @@ class InteropService:
                 "endpoint": endpoint,
                 "status_code": response.status_code,
                 "response_preview": response.text[:500],
+                "attempts": attempts,
             }
         except Exception as e:
             log.status = InteropStatus.FAILURE
@@ -132,16 +187,6 @@ class InteropService:
         dry_run: bool = False,
     ) -> Dict[str, Any]:
         """Pull aggregate data from DHIS2 and store it in EpiSphere."""
-        try:
-            if len(period) == 6 and period.isdigit():
-                # YYYYMM format
-                record_date = datetime.strptime(f"{period}01", "%Y%m%d").date()
-            else:
-                # Assume ISO format or fallback to today
-                record_date = datetime.fromisoformat(period).date()
-        except ValueError:
-            record_date = datetime.utcnow().date()
-
         log = InteropLog(
             system_name="DHIS2",
             direction=InteropDirection.INBOUND,
@@ -156,9 +201,65 @@ class InteropService:
         )
         db.add(log)
         db.flush()
+        try:
+            if len(period) == 6 and period.isdigit():
+                # YYYYMM format
+                record_date = datetime.strptime(f"{period}01", "%Y%m%d").date()
+            elif len(period) == 10:
+                record_date = datetime.fromisoformat(period).date()
+            else:
+                raise ValueError("DHIS2 period must be YYYYMM or YYYY-MM-DD")
+        except (TypeError, ValueError) as exc:
+            log.status = InteropStatus.FAILURE
+            log.details = {**(log.details or {}), "validation_error": str(exc)}
+            db.commit()
+            return {
+                "success": False,
+                "status": log.status.value,
+                "log_id": log.id,
+                "records_imported": 0,
+                "dry_run": True,
+                "errors": [str(exc)],
+                "message": "DHIS2 period failed validation and was not requested.",
+            }
+
+        country = db.query(Country).filter(Country.id == country_id).first()
+        if not country:
+            error = "Country not found"
+            log.status = InteropStatus.FAILURE
+            log.details = {**(log.details or {}), "validation_error": error}
+            db.commit()
+            return {"success": False, "status": log.status.value, "log_id": log.id, "records_imported": 0, "dry_run": True, "errors": [error], "message": error}
+
+        disease_ids = set(mapping.values())
+        known_disease_ids = {row.id for row in db.query(Disease.id).filter(Disease.id.in_(disease_ids)).all()}
+        unknown_disease_ids = sorted(disease_ids - known_disease_ids)
+        if unknown_disease_ids:
+            error = f"Unknown disease IDs in DHIS2 mapping: {unknown_disease_ids}"
+            log.status = InteropStatus.FAILURE
+            log.details = {**(log.details or {}), "validation_error": error}
+            db.commit()
+            return {"success": False, "status": log.status.value, "log_id": log.id, "records_imported": 0, "dry_run": True, "errors": [error], "message": error}
+
+        source_system = db.query(SourceSystem).filter(SourceSystem.code == "dhis2").first()
+        if not source_system:
+            source_system = SourceSystem(name="DHIS2", code="dhis2", system_type="interop", owner="DHIS2", is_active=True)
+            db.add(source_system)
+            db.flush()
+        batch = ImportBatch(
+            filename=f"{dataset_id}_{org_unit}_{period}",
+            dataset_type="dhis2_aggregate",
+            status=ImportStatus.PENDING,
+            source_system_id=source_system.id,
+            country_id=country_id,
+            batch_metadata={"dataset_id": dataset_id, "org_unit": org_unit, "period": period, "dry_run": dry_run},
+        )
+        db.add(batch)
+        db.flush()
 
         if dry_run or not settings.DHIS2_URL:
             log.status = InteropStatus.SUCCESS
+            batch.status = ImportStatus.VALIDATED
             log.details = {**(log.details or {}), "message": "Dry run or DHIS2_URL not configured."}
             db.commit()
             return {
@@ -182,13 +283,14 @@ class InteropService:
             if settings.DHIS2_USERNAME and settings.DHIS2_PASSWORD:
                 auth = (settings.DHIS2_USERNAME, settings.DHIS2_PASSWORD)
 
-            response = httpx.get(
+            response, attempts = InteropService._request_with_retry(
+                "get",
                 endpoint,
                 params=params,
                 auth=auth,
                 timeout=settings.DHIS2_TIMEOUT_SECONDS,
+                attempts=settings.DHIS2_MAX_RETRIES,
             )
-            response.raise_for_status()
             data = response.json()
             
             data_values = data.get("dataValues", [])
@@ -207,31 +309,42 @@ class InteropService:
                 except (ValueError, TypeError):
                     continue
 
+                source_record_id = hashlib.sha256(
+                    f"dhis2|{dataset_id}|{org_unit}|{period}|{country_id}|{disease_id}|{dhis2_element}".encode("utf-8")
+                ).hexdigest()
                 case_record = db.query(Case).filter(
-                    Case.country_id == country_id,
-                    Case.disease_id == disease_id,
-                    Case.date == record_date,
-                    Case.source == "DHIS2 Integration"
+                    Case.source_system_id == source_system.id,
+                    Case.source_record_id == source_record_id,
                 ).first()
 
                 if case_record:
                     case_record.daily_cases = cases_count
+                    case_record.import_batch_id = batch.id
                 else:
                     new_case = Case(
                         country_id=country_id,
                         disease_id=disease_id,
                         date=record_date,
                         daily_cases=cases_count,
-                        source="DHIS2 Integration"
+                        source="DHIS2 Integration",
+                        source_system_id=source_system.id,
+                        source_record_id=source_record_id,
+                        import_batch_id=batch.id,
                     )
                     db.add(new_case)
                 records_imported += 1
 
+            batch.rows_total = len(data_values)
+            batch.rows_valid = records_imported
+            batch.rows_committed = records_imported
+            batch.status = ImportStatus.COMMITTED
+            batch.committed_at = datetime.utcnow()
             log.status = InteropStatus.SUCCESS
             log.details = {
                 **(log.details or {}),
                 "records_imported": records_imported,
-                "response_preview": str(data)[:500]
+                "response_preview": str(data)[:500],
+                "attempts": attempts,
             }
             db.commit()
 
@@ -246,6 +359,8 @@ class InteropService:
             }
 
         except Exception as e:
+            batch.status = ImportStatus.FAILED
+            batch.error_count = 1
             log.status = InteropStatus.FAILURE
             log.details = {**(log.details or {}), "error": str(e)}
             db.commit()

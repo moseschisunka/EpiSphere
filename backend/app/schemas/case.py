@@ -18,6 +18,7 @@ class CaseBase(BaseModel):
     subnational_region: Optional[str] = None
     source: Optional[str] = None
     source_system_id: Optional[int] = None
+    source_record_id: Optional[str] = None
     import_batch_id: Optional[int] = None
     reporting_period_start: Optional[date] = None
     reporting_period_end: Optional[date] = None

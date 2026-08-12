@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.core.dependencies import get_current_active_user, get_agent_or_admin
-from app.db.models import User
+from app.core.dependencies import get_current_active_user, get_dataset_agent_or_admin
+from app.db.models import AuditAction, AuditLog, User
 from app.schemas.public_datasets import CsvIngestRequest, WhoGhoIngestRequest, IngestResponse
 from app.services.public_dataset_service import PublicDatasetService
 from app.core.limiter import limiter
@@ -15,7 +15,7 @@ async def ingest_csv_dataset(
     request: Request,
     payload: CsvIngestRequest,
     db: Session = Depends(get_db),
-    agent_or_admin = Depends(get_agent_or_admin)
+    agent_or_admin = Depends(get_dataset_agent_or_admin)
 ):
     """
     Ingest a public CSV dataset from a URL dynamically.
@@ -29,6 +29,21 @@ async def ingest_csv_dataset(
             disease_id=payload.disease_id,
             dry_run=payload.dry_run
         )
+        db.add(AuditLog(
+            user_id=agent_or_admin.id if isinstance(agent_or_admin, User) else None,
+            action=AuditAction.UPLOAD,
+            resource_type="import_batch",
+            resource_id=result.get("batch_id"),
+            details={
+                "actor": agent_or_admin.name if hasattr(agent_or_admin, "name") else "admin",
+                "auth_method": agent_or_admin.auth_method if hasattr(agent_or_admin, "auth_method") else "bearer",
+                "request_id": getattr(request.state, "request_id", None),
+                "dataset_type": "csv",
+                "records_imported": result.get("records_imported", 0),
+                "dry_run": payload.dry_run,
+            },
+        ))
+        db.commit()
         return result
     except Exception as e:
         raise HTTPException(
@@ -42,7 +57,7 @@ async def ingest_who_gho_dataset(
     request: Request,
     payload: WhoGhoIngestRequest,
     db: Session = Depends(get_db),
-    agent_or_admin = Depends(get_agent_or_admin)
+    agent_or_admin = Depends(get_dataset_agent_or_admin)
 ):
     """
     Ingest a dataset from WHO Global Health Observatory API.
@@ -55,6 +70,21 @@ async def ingest_who_gho_dataset(
             disease_id=payload.disease_id,
             dry_run=payload.dry_run
         )
+        db.add(AuditLog(
+            user_id=agent_or_admin.id if isinstance(agent_or_admin, User) else None,
+            action=AuditAction.UPLOAD,
+            resource_type="import_batch",
+            resource_id=result.get("batch_id"),
+            details={
+                "actor": agent_or_admin.name if hasattr(agent_or_admin, "name") else "admin",
+                "auth_method": agent_or_admin.auth_method if hasattr(agent_or_admin, "auth_method") else "bearer",
+                "request_id": getattr(request.state, "request_id", None),
+                "dataset_type": "who_gho",
+                "records_imported": result.get("records_imported", 0),
+                "dry_run": payload.dry_run,
+            },
+        ))
+        db.commit()
         return result
     except Exception as e:
         raise HTTPException(

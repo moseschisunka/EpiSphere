@@ -2,7 +2,7 @@
 Application configuration using Pydantic settings
 """
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 from pathlib import Path
@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     AGENT_API_KEY: str = ""
+    NEWS_AGENT_API_KEY: str = ""
+    DATASET_AGENT_API_KEY: str = ""
+    N8N_ENCRYPTION_KEY: str = ""
 
     # CORS / hosts
     CORS_ORIGINS: str | List[str] = ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001"]
@@ -36,12 +39,20 @@ class Settings(BaseSettings):
     UPLOAD_DIR: Path = Path("uploads")
     MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024  # 50MB
     ALLOWED_EXTENSIONS: List[str] = [".csv", ".xlsx", ".xls"]
+    PUBLIC_DATASET_ALLOWED_HOSTS: str | List[str] = [
+        "ghoapi.azureedge.net",
+        "raw.githubusercontent.com",
+        "www.who.int",
+    ]
+    PUBLIC_DATASET_MAX_ROWS: int = 100_000
+    PUBLIC_DATASET_MAX_REDIRECTS: int = 3
 
     # Interoperability
     DHIS2_URL: str = ""
     DHIS2_USERNAME: str = ""
     DHIS2_PASSWORD: str = ""
     DHIS2_TIMEOUT_SECONDS: int = 30
+    DHIS2_MAX_RETRIES: int = 3
 
     # Email (for notifications)
     SMTP_HOST: str = "smtp.gmail.com"
@@ -54,16 +65,26 @@ class Settings(BaseSettings):
     ML_MODEL_DIR: Path = Path("models")
     FORECAST_HORIZON_DAYS: int = 30
     OUTBREAK_DETECTION_WINDOW: int = 14  # days
+    ALERT_SUPPRESSION_HOURS: int = 24
 
     @field_validator("SECRET_KEY")
     @classmethod
     def reject_default_secret_in_production(cls, value: str, info):
         env = info.data.get("ENVIRONMENT", "development")
-        if env.lower() in {"production", "prod"} and value == "change-this-secret-key-in-production":
+        if env.lower() in {"production", "prod"} and value in {"change-this-secret-key-in-production", "change-this-in-development"}:
             raise ValueError("SECRET_KEY must be configured in production")
         return value
 
-    @field_validator("CORS_ORIGINS", "ALLOWED_HOSTS", mode="before")
+    @model_validator(mode="after")
+    def require_production_integration_secrets(self):
+        if self.ENVIRONMENT.lower() in {"production", "prod"}:
+            if not self.NEWS_AGENT_API_KEY or not self.DATASET_AGENT_API_KEY:
+                raise ValueError("NEWS_AGENT_API_KEY and DATASET_AGENT_API_KEY must be configured in production")
+            if not self.N8N_ENCRYPTION_KEY:
+                raise ValueError("N8N_ENCRYPTION_KEY must be configured in production")
+        return self
+
+    @field_validator("CORS_ORIGINS", "ALLOWED_HOSTS", "PUBLIC_DATASET_ALLOWED_HOSTS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: str | List[str]) -> List[str]:
         if isinstance(v, str) and not v.startswith("["):
