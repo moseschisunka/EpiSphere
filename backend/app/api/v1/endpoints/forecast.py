@@ -1,6 +1,6 @@
 """Forecast endpoints"""
 
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -46,8 +46,8 @@ async def generate_forecast(
 
 @router.get("/", response_model=List[ForecastResponse])
 async def list_forecasts(
-    country_id: int = None,
-    disease_id: int = None,
+    country_id: Optional[int] = None,
+    disease_id: Optional[int] = None,
     skip: int = 0,
     limit: int = 100,
     current_user: User = Depends(get_current_active_user),

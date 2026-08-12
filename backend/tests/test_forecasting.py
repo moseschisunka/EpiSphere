@@ -6,6 +6,8 @@ from sqlalchemy.orm import sessionmaker
 from app.db.models import Base, Disease, BiosafetyLevel
 from app.ml.forecasting import ForecastingPipeline
 from app.schemas.disease import DiseaseCreate, DiseaseResponse
+from app.schemas.forecast import ForecastRequest, ForecastResponse
+from pydantic import ValidationError
 
 def make_session():
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
@@ -51,3 +53,34 @@ def test_exponential_smoothing_forecasting():
     assert len(result["forecast_data"]["lower_bound"]) == 10
     assert len(result["forecast_data"]["upper_bound"]) == 10
     assert "exp_smoothing" in result["accuracy_metrics"]["candidate_models"]
+
+
+def test_forecast_request_bounds_and_model_allowlist():
+    request = ForecastRequest(country_id=1, disease_id=2, horizon_days=90, model_type="arima")
+    assert request.horizon_days == 90
+
+    for payload in (
+        {"country_id": 1, "disease_id": 2, "horizon_days": 0},
+        {"country_id": 1, "disease_id": 2, "horizon_days": 91},
+        {"country_id": 1, "disease_id": 2, "model_type": "lstm"},
+    ):
+        try:
+            ForecastRequest(**payload)
+        except ValidationError:
+            continue
+        raise AssertionError(f"Invalid forecast request was accepted: {payload}")
+
+
+def test_forecast_response_accepts_nested_provenance_metrics():
+    response = ForecastResponse(
+        id=1,
+        country_id=1,
+        disease_id=2,
+        forecast_date=date.today(),
+        model_type="exp_smoothing",
+        horizon_days=7,
+        forecast_data={"values": [1.0]},
+        accuracy_metrics={"rolling_backtest": {"mae": 1.2}, "model_version": "v2"},
+        created_at=date.today(),
+    )
+    assert response.accuracy_metrics["rolling_backtest"]["mae"] == 1.2

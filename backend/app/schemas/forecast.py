@@ -1,18 +1,18 @@
 ﻿"""Forecast schemas"""
 
-from pydantic import BaseModel, ConfigDict
-from typing import Optional, Dict, Any
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal, Optional, Dict, Any
 from datetime import date, datetime
 
 
 class ForecastBase(BaseModel):
-    country_id: int
-    disease_id: int
+    country_id: int = Field(..., gt=0)
+    disease_id: int = Field(..., gt=0)
     forecast_date: date
     model_type: str
     horizon_days: int
     forecast_data: Dict[str, Any]
-    accuracy_metrics: Optional[Dict[str, float]] = None
+    accuracy_metrics: Optional[Dict[str, Any]] = None
 
 
 class ForecastCreate(ForecastBase):
@@ -30,8 +30,8 @@ class ForecastResponse(ForecastBase):
 
 class ForecastRequest(BaseModel):
     """Request to generate a forecast"""
-    country_id: int
-    disease_id: int
-    horizon_days: int = 30
-    model_type: Optional[str] = None  # If None, auto-select best model
+    country_id: int = Field(..., gt=0)
+    disease_id: int = Field(..., gt=0)
+    horizon_days: int = Field(default=30, ge=1, le=90)
+    model_type: Optional[Literal["seasonal_naive", "simple_trend", "exp_smoothing", "arima", "prophet"]] = None
 
