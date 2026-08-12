@@ -35,6 +35,12 @@ async def ingest_csv_dataset(
                     "disease_id": payload.disease_id,
                     "dry_run": payload.dry_run,
                     "require_review": True,
+                    "_origin": {
+                        "workflow_identity": agent_or_admin.name if hasattr(agent_or_admin, "name") else "admin",
+                        "auth_method": agent_or_admin.auth_method if hasattr(agent_or_admin, "auth_method") else "bearer",
+                        "request_id": getattr(request.state, "request_id", None),
+                        "source": "n8n_dataset_csv",
+                    },
                 },
                 created_by=agent_or_admin.id if isinstance(agent_or_admin, User) else None,
             )
@@ -115,6 +121,12 @@ async def ingest_who_gho_dataset(
                     "mapping_version": payload.mapping_version,
                     "dry_run": payload.dry_run,
                     "require_review": True,
+                    "_origin": {
+                        "workflow_identity": agent_or_admin.name if hasattr(agent_or_admin, "name") else "admin",
+                        "auth_method": agent_or_admin.auth_method if hasattr(agent_or_admin, "auth_method") else "bearer",
+                        "request_id": getattr(request.state, "request_id", None),
+                        "source": "n8n_dataset_who_gho",
+                    },
                 },
                 created_by=agent_or_admin.id if isinstance(agent_or_admin, User) else None,
             )

@@ -25,6 +25,7 @@ def test_worker_dispatches_public_csv_jobs(monkeypatch):
             "mapping": {"country_iso": "Country"},
             "disease_id": 2,
             "dry_run": True,
+            "_origin": {"workflow_identity": "n8n-datasets"},
         },
     )
 
@@ -33,6 +34,7 @@ def test_worker_dispatches_public_csv_jobs(monkeypatch):
     assert result["records_imported"] == 3
     assert calls["db"].__class__ is _FakeDb
     assert calls["disease_id"] == 2
+    assert "_origin" not in calls
 
 
 def test_worker_rejects_unknown_job_types():

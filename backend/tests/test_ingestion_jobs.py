@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.models import Base, IngestionJobStatus
+from app.db.models import AuditLog, Base, ImportBatch, IngestionJobStatus, ImportStatus
 from app.services.ingestion_jobs import (
     claim_next_job,
     complete_job,
@@ -59,6 +59,28 @@ def test_successful_job_records_result():
     complete_job(db, claimed, {"rows": 4})
     assert claimed.status is IngestionJobStatus.SUCCEEDED
     assert claimed.result == {"rows": 4}
+    db.close()
+
+
+def test_completed_originating_job_links_its_batch_and_audit_context():
+    db = make_session()
+    batch = ImportBatch(filename="source.csv", dataset_type="case_timeseries", status=ImportStatus.VALIDATED)
+    db.add(batch)
+    db.commit()
+    job = enqueue_job(
+        db,
+        job_type="public_csv",
+        payload={"_origin": {"workflow_identity": "n8n-datasets", "request_id": "req-123", "source": "n8n_dataset_csv"}},
+    )
+    claimed = claim_next_job(db, worker_id="worker-a")
+
+    completed = complete_job(db, claimed, {"batch_id": batch.id, "records_staged": 4})
+
+    assert completed.import_batch_id == batch.id
+    audit = db.query(AuditLog).filter(AuditLog.resource_type == "import_batch").one()
+    assert audit.resource_id == batch.id
+    assert audit.details["workflow_identity"] == "n8n-datasets"
+    assert audit.details["request_id"] == "req-123"
     db.close()
 
 

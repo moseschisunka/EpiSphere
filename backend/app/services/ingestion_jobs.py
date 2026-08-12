@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from app.db.models import IngestionJob, IngestionJobStatus, WorkerHeartbeat
+from app.db.models import AuditAction, AuditLog, IngestionJob, IngestionJobStatus, WorkerHeartbeat
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +125,25 @@ def complete_job(db: Session, job: IngestionJob, result: dict | None = None) -> 
         return job
     job.status = IngestionJobStatus.SUCCEEDED
     job.result = result or {}
+    batch_id = job.result.get("batch_id") if isinstance(job.result, dict) else None
+    if isinstance(batch_id, int) and batch_id > 0:
+        job.import_batch_id = batch_id
+        origin = job.payload.get("_origin") if isinstance(job.payload, dict) else None
+        if isinstance(origin, dict):
+            db.add(AuditLog(
+                user_id=job.created_by,
+                action=AuditAction.UPLOAD,
+                resource_type="import_batch",
+                resource_id=batch_id,
+                details={
+                    "event": "worker_import_completed",
+                    "ingestion_job_id": job.id,
+                    "workflow_identity": origin.get("workflow_identity"),
+                    "auth_method": origin.get("auth_method"),
+                    "request_id": origin.get("request_id"),
+                    "source": origin.get("source"),
+                },
+            ))
     job.error = None
     job.completed_at = datetime.utcnow()
     job.updated_at = datetime.utcnow()
