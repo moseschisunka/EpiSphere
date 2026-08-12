@@ -174,6 +174,21 @@ export const facilitiesApi = {
   }
 }
 
+export const usersApi = {
+  list: async () => {
+    const response = await api.get('/users')
+    return response.data
+  },
+  roles: async () => {
+    const response = await api.get('/users/roles')
+    return response.data
+  },
+  assignRole: async (userId: number, data: { role_id: number; facility_id?: number | null; country_id?: number | null; is_verified: boolean }) => {
+    const response = await api.put(`/users/${userId}/role`, data)
+    return response.data
+  },
+}
+
 export const clinicalApi = {
   getPatients: async () => {
     const response = await api.get('/clinical/patients')
@@ -212,6 +227,10 @@ export const surveillanceApi = {
 }
 
 export const interopApi = {
+  getSourceSystems: async () => {
+    const response = await api.get('/interop/source-systems')
+    return response.data
+  },
   getLogs: async () => {
     const response = await api.get('/interop/logs')
     return response.data

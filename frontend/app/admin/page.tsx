@@ -262,6 +262,13 @@ export default function AdminPage() {
 
             <div className="flex items-center gap-2">
               <Button
+                variant="ghost"
+                onClick={() => router.push('/admin/access')}
+                className="text-white hover:bg-white/10"
+              >
+                Access & Sources
+              </Button>
+              <Button
                 variant={activeTab === 'news' ? 'primary' : 'ghost'}
                 onClick={() => fetchTabContent('news')}
                 className="text-white hover:bg-white/10"

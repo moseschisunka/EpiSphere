@@ -8,12 +8,31 @@ from datetime import datetime, date
 from app.api.v1.deps import allow_admin
 from app.core.dependencies import get_agent_or_admin
 from app.core.database import get_db
-from app.db.models import User, InteropLog, Case, Disease, Country, InteropDirection, InteropStatus
+from app.db.models import User, InteropLog, Case, Disease, Country, InteropDirection, InteropStatus, SourceSystem
 from app.schemas.interop import DHIS2SyncRequest, DHIS2SyncResponse, DHIS2PullRequest, DHIS2PullResponse
 from app.schemas.interop_extract import DataExtractResponse, AggregateCaseMetric, WebhookPayload
 from app.services.interop_service import InteropService
 
 router = APIRouter()
+
+
+@router.get("/source-systems")
+def list_source_systems(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(allow_admin),
+):
+    """List configured source identities and their active state."""
+    return [
+        {
+            "id": source.id,
+            "name": source.name,
+            "code": source.code,
+            "system_type": source.system_type,
+            "owner": source.owner,
+            "is_active": source.is_active,
+        }
+        for source in db.query(SourceSystem).order_by(SourceSystem.name).all()
+    ]
 
 
 @router.post("/dhis2/sync", response_model=DHIS2SyncResponse)

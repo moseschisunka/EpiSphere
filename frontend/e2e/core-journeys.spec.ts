@@ -171,10 +171,17 @@ test('platform administrator can access the operations hub', async ({ page }) =>
       published_at: '2026-08-12T00:00:00Z',
     }]),
   }))
+  await page.route('**/api/v1/users/roles*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 1, name: 'admin' }, { id: 2, name: 'clinician' }]) }))
+  await page.route('**/api/v1/users*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 1, username: 'platform-admin', email: 'admin@example.com', role_id: 1, is_active: true, is_verified: true }]) }))
+  await page.route('**/api/v1/facilities*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 1, name: 'Lusaka Clinic', country_id: 1, public_visible: false }]) }))
+  await page.route('**/api/v1/interop/source-systems*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 1, name: 'WHO GHO', code: 'who_gho', system_type: 'api_ingestion', is_active: true }]) }))
 
   await page.goto('/admin')
   await expect(page.getByRole('heading', { name: 'System Control & Operations Hub' })).toBeVisible()
   await expect(page.getByText('Cholera response update')).toBeVisible()
+  await page.getByRole('button', { name: 'Access & Sources' }).click()
+  await expect(page.getByRole('heading', { name: 'Access and source administration' })).toBeVisible()
+  await expect(page.getByText('WHO GHO')).toBeVisible()
 })
 
 test('privileged login redirects to the MFA challenge', async ({ page }) => {
