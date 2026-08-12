@@ -800,6 +800,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dashboard/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Operations Dashboard
+         * @description Operational Ministry/EOC queue, reporting delays, and response SLA status.
+         */
+        get: operations["get_operations_dashboard_api_v1_dashboard_operations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/facilities/": {
         parameters: {
             query?: never;
@@ -1587,9 +1607,29 @@ export interface paths {
         };
         /**
          * Health Check
-         * @description Health check endpoint
+         * @description Backward-compatible application liveness endpoint.
          */
         get: operations["health_check_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Liveness Check
+         * @description Process liveness only; dependency failures belong to readiness probes.
+         */
+        get: operations["liveness_check_live_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2968,6 +3008,45 @@ export interface components {
          * @enum {string}
          */
         NotificationStatus: "pending" | "sent" | "failed";
+        /** OperationsAlertQueueItem */
+        OperationsAlertQueueItem: {
+            /** Id */
+            id: number;
+            /** Country Id */
+            country_id: number;
+            /** Country Name */
+            country_name: string;
+            /** Disease Name */
+            disease_name: string;
+            /** Severity */
+            severity: string;
+            /** Status */
+            status: string;
+            /**
+             * Triggered At
+             * Format: date-time
+             */
+            triggered_at: string;
+            /** Assigned To */
+            assigned_to?: number | null;
+            /** Age Hours */
+            age_hours: number;
+            /** Sla Due */
+            sla_due: boolean;
+        };
+        /** OperationsDashboardResponse */
+        OperationsDashboardResponse: {
+            /** Active Alerts */
+            active_alerts: number;
+            /** Overdue Alerts */
+            overdue_alerts: number;
+            /** Unassigned Alerts */
+            unassigned_alerts: number;
+            /** Alert Queue */
+            alert_queue: components["schemas"]["OperationsAlertQueueItem"][];
+            /** Reporting Delays */
+            reporting_delays: components["schemas"]["ReportingDelayItem"][];
+        };
         /** PasswordResetConfirm */
         PasswordResetConfirm: {
             /** Token */
@@ -3171,6 +3250,19 @@ export interface components {
          * @enum {string}
          */
         ReportType: "weekly_bulletin" | "monthly_report" | "outbreak_report" | "custom";
+        /** ReportingDelayItem */
+        ReportingDelayItem: {
+            /** Country Id */
+            country_id: number;
+            /** Country Name */
+            country_name: string;
+            /** Latest Data Date */
+            latest_data_date?: string | null;
+            /** Reporting Lag Days */
+            reporting_lag_days?: number | null;
+            /** Freshness Status */
+            freshness_status: string;
+        };
         /**
          * ReviewStatus
          * @enum {string}
@@ -4824,6 +4916,37 @@ export interface operations {
             };
         };
     };
+    get_operations_dashboard_api_v1_dashboard_operations_get: {
+        parameters: {
+            query?: {
+                country_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationsDashboardResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_facilities_api_v1_facilities__get: {
         parameters: {
             query?: {
@@ -6065,6 +6188,26 @@ export interface operations {
         };
     };
     health_check_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    liveness_check_live_get: {
         parameters: {
             query?: never;
             header?: never;

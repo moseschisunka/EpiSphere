@@ -69,7 +69,7 @@ jobs:
           connection = sqlite3.connect("ci-legacy-migration.db")
           columns = {row[1] for row in connection.execute("PRAGMA table_info(diseases)")}
           assert "biosafety_level" in columns
-          assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0012_staged_import_cases"
+          assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0013_alert_investigation_evidence"
           PY
 
   migrations-postgres:
