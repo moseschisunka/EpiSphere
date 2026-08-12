@@ -13,6 +13,9 @@
 5. Set resource ceilings for PostgreSQL, Redis, backend, ingestion worker,
    frontend, and n8n. The `.env.example` defaults are conservative starting
    points, not capacity commitments; tune them with staging load evidence.
+6. Keep `POSTGRES_PORT_BIND` and `REDIS_PORT_BIND` loopback-only. Containers
+   communicate over the internal Compose network; use a separately secured
+   administrative tunnel or network path rather than exposing either service.
 
 Before enabling the production MFA flag, enroll every privileged operator using
 `POST /api/v1/auth/mfa/setup` and `POST /api/v1/auth/mfa/enable` in a protected

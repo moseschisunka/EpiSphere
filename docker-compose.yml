@@ -12,7 +12,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-episphere_password}
       POSTGRES_DB: ${POSTGRES_DB:-episphere_db}
     ports:
-      - "5432:5432"
+      # Keep data stores private to the host by default. Containers use the
+      # internal Compose network; remote administration needs an explicit,
+      # separately secured path.
+      - "${POSTGRES_PORT_BIND:-127.0.0.1:5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -28,7 +31,7 @@ services:
     cpus: ${REDIS_CPUS:-0.5}
     mem_limit: ${REDIS_MEMORY_LIMIT:-256m}
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT_BIND:-127.0.0.1:6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
