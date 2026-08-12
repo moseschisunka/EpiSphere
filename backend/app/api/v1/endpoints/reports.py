@@ -79,7 +79,7 @@ async def list_reports(
             file_format=r.file_format,
             generated_by=r.generated_by,
             generated_at=r.generated_at,
-            metadata=r.metadata
+            report_metadata=r.report_metadata
         )
         for r in reports
     ]
@@ -108,5 +108,5 @@ async def get_report(
         file_format=report.file_format,
         generated_by=report.generated_by,
         generated_at=report.generated_at,
-        metadata=report.metadata
+        report_metadata=report.report_metadata
     )
