@@ -5,7 +5,7 @@ import ipaddress
 import json
 import hashlib
 import socket
-from datetime import datetime
+from datetime import date, datetime
 from sqlalchemy.orm import Session
 from typing import Dict, Any
 from app.db.models import (
@@ -15,6 +15,8 @@ from app.db.models import (
     ImportBatch,
     ImportStatus,
     SourceSystem,
+    DataQualityCheck,
+    QualitySeverity,
 )
 from urllib.parse import urljoin, urlparse
 from app.core.config import settings
@@ -22,6 +24,8 @@ from app.core.config import settings
 class PublicDatasetService:
     MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
     REQUIRED_MAPPING_KEYS = {"country_iso", "date", "daily_cases"}
+    MIN_VALIDITY_RATE = 0.95
+    MAX_TIMELINESS_LAG_DAYS = 14
 
     @staticmethod
     def _source_record_id(*parts: Any) -> str:
@@ -92,6 +96,55 @@ class PublicDatasetService:
         db.add(batch)
         db.flush()
         return batch
+
+    @classmethod
+    def _add_quality_checks(
+        cls,
+        db: Session,
+        batch_id: int,
+        rows_total: int,
+        rows_valid: int,
+        duplicate_rows: int,
+        record_dates: list[date],
+    ) -> None:
+        """Persist shared quality signals for every public-source import batch."""
+        validity_rate = rows_valid / rows_total if rows_total else 0.0
+        latest_date = max(record_dates) if record_dates else None
+        lag_days = (date.today() - latest_date).days if latest_date else None
+        checks = (
+            DataQualityCheck(
+                batch_id=batch_id,
+                check_name="row_validity_rate",
+                severity=QualitySeverity.ERROR,
+                passed=validity_rate >= cls.MIN_VALIDITY_RATE,
+                metric_value=validity_rate,
+                threshold=cls.MIN_VALIDITY_RATE,
+                message=f"{validity_rate:.0%} of source rows passed validation",
+            ),
+            DataQualityCheck(
+                batch_id=batch_id,
+                check_name="duplicate_source_rows",
+                severity=QualitySeverity.WARNING,
+                passed=duplicate_rows == 0,
+                metric_value=float(duplicate_rows),
+                threshold=0.0,
+                message=f"{duplicate_rows} duplicate source row(s) found",
+            ),
+            DataQualityCheck(
+                batch_id=batch_id,
+                check_name="timeliness",
+                severity=QualitySeverity.WARNING,
+                passed=lag_days is not None and lag_days <= cls.MAX_TIMELINESS_LAG_DAYS,
+                metric_value=float(lag_days) if lag_days is not None else None,
+                threshold=float(cls.MAX_TIMELINESS_LAG_DAYS),
+                message=(
+                    f"Latest record is within {cls.MAX_TIMELINESS_LAG_DAYS} days"
+                    if lag_days is not None and lag_days <= cls.MAX_TIMELINESS_LAG_DAYS
+                    else "Latest record is older than the configured timeliness threshold or unavailable"
+                ),
+            ),
+        )
+        db.add_all(checks)
 
     @staticmethod
     def _validate_public_url(url: str) -> None:
@@ -203,6 +256,9 @@ class PublicDatasetService:
         records_imported = 0
         errors = []
         warnings = []
+        source_keys: set[tuple[int, Any]] = set()
+        record_dates: list[date] = []
+        duplicate_rows = 0
         
         # Pre-fetch countries
         countries = db.query(Country).all()
@@ -243,6 +299,13 @@ class PublicDatasetService:
                     warnings.append(f"Row {i + 1}: date is not in YYYY-MM-DD format")
                     continue
 
+                source_key = (c_id, record_date)
+                if source_key in source_keys:
+                    duplicate_rows += 1
+                    warnings.append(f"Row {i + 1}: duplicate country/date source row")
+                    continue
+                source_keys.add(source_key)
+
                 cases_raw = row.get(mapping.get('daily_cases', ''))
                 deaths_raw = row.get(mapping.get('daily_deaths', ''))
                 
@@ -280,6 +343,7 @@ class PublicDatasetService:
                         db.add(new_case)
                 
                 records_imported += 1
+                record_dates.append(record_date)
             except Exception as e:
                 errors.append(f"Row {i+1}: {str(e)}")
 
@@ -292,6 +356,9 @@ class PublicDatasetService:
         batch.status = ImportStatus.VALIDATED if dry_run else (ImportStatus.FAILED if errors else ImportStatus.COMMITTED)
         if not dry_run and not errors:
             batch.committed_at = datetime.utcnow()
+        PublicDatasetService._add_quality_checks(
+            db, batch.id, rows_total, records_imported, duplicate_rows, record_dates
+        )
 
         db.commit()
 
@@ -364,6 +431,9 @@ class PublicDatasetService:
         rows_total = len(values)
         records_imported = 0
         warnings = []
+        source_keys: set[tuple[int, Any]] = set()
+        record_dates: list[date] = []
+        duplicate_rows = 0
         
         # Pre-fetch countries
         countries = db.query(Country).all()
@@ -393,6 +463,13 @@ class PublicDatasetService:
                         record_date = datetime.strptime(str(time_dim).strip(), "%Y-%m-%d").date()
                     except:
                         continue
+
+                source_key = (c_id, record_date)
+                if source_key in source_keys:
+                    duplicate_rows += 1
+                    warnings.append(f"WHO row for {spatial_dim} and {record_date.isoformat()} is duplicated")
+                    continue
+                source_keys.add(source_key)
                 
                 daily_cases = int(numeric_val)
 
@@ -424,6 +501,7 @@ class PublicDatasetService:
                         db.add(new_case)
                         
                 records_imported += 1
+                record_dates.append(record_date)
             except Exception as exc:
                 warnings.append(f"WHO row could not be parsed: {exc}")
                 continue
@@ -436,6 +514,9 @@ class PublicDatasetService:
         batch.status = ImportStatus.VALIDATED if dry_run else ImportStatus.COMMITTED
         if not dry_run:
             batch.committed_at = datetime.utcnow()
+        PublicDatasetService._add_quality_checks(
+            db, batch.id, rows_total, records_imported, duplicate_rows, record_dates
+        )
 
         db.commit()
 

@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.db.models import Base
 from app.services.public_dataset_service import PublicDatasetService
-from app.db.models import Country, Disease, Case, ImportBatch, SourceSystem, ImportStatus
+from app.db.models import Case, Country, DataQualityCheck, Disease, ImportBatch, ImportStatus, SourceSystem
 from app.core.config import settings
 
 @pytest.fixture
@@ -76,6 +76,10 @@ UNKNOWN,2023-01-03,10,0
         assert batch.batch_metadata["mapping_version"] == "zambia-cholera-v2"
         assert batch.batch_metadata["mapping_sha256"]
         assert batch.batch_metadata["source_last_modified"] == "Wed, 21 Oct 2015 07:28:00 GMT"
+        checks = {check.check_name: check for check in db.query(DataQualityCheck).filter(DataQualityCheck.batch_id == batch.id)}
+        assert checks["row_validity_rate"].passed is False
+        assert checks["duplicate_source_rows"].metric_value == 0.0
+        assert checks["timeliness"].threshold == 14.0
         assert all(case.import_batch_id == batch.id for case in cases)
 
 def test_ingest_who_gho_success(make_session):
@@ -125,6 +129,7 @@ def test_ingest_who_gho_success(make_session):
         assert batch.batch_metadata["indicator_code"] == "CHOLERA_TEST"
         assert batch.batch_metadata["mapping_version"] == "who-gho-v1"
         assert batch.batch_metadata["dataset_contract_version"] == "case_timeseries/v1"
+        assert db.query(DataQualityCheck).filter(DataQualityCheck.batch_id == batch.id).count() == 3
 
 
 def test_reprocessing_same_public_source_is_idempotent(make_session):
