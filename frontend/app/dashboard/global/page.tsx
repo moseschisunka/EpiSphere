@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import { RefreshCw, Filter } from 'lucide-react'
 import StatsCards from '@/components/dashboard/StatsCards'
 import TimeSeriesChart from '@/components/dashboard/TimeSeriesChart'
+import { dashboardApi, diseasesApi } from '@/lib/api'
 
 // Dynamic import for Leaflet map to avoid SSR issues
 const GlobalMap = dynamic(() => import('@/components/dashboard/GlobalMap'), { 
@@ -12,52 +13,77 @@ const GlobalMap = dynamic(() => import('@/components/dashboard/GlobalMap'), {
   loading: () => <div className="h-[500px] w-full rounded-xl bg-slate-100 dark:bg-slate-800 animate-pulse flex items-center justify-center text-slate-500 dark:text-slate-400">Loading map...</div>
 })
 
+interface GlobalDashboardData {
+  global_stats: {
+    total_cases: number
+    total_deaths: number
+    total_countries: number
+    active_diseases: number
+    active_alerts: number
+    latest_data_date?: string | null
+    data_completeness?: number | null
+    median_reporting_lag_days?: number | null
+  }
+  country_stats: Array<{
+    country_id: number
+    country_name: string
+    iso_code: string
+    total_cases: number
+    total_deaths: number
+    latitude?: number | null
+    longitude?: number | null
+  }>
+  time_series: Array<{ date: string; value: number }>
+}
+
+function getDateRange(range: string) {
+  const end = new Date()
+  const start = new Date(end)
+  if (range === '7d') start.setDate(end.getDate() - 6)
+  else if (range === '30d') start.setDate(end.getDate() - 29)
+  else if (range === '90d') start.setDate(end.getDate() - 89)
+  else if (range === '1y') start.setDate(end.getDate() - 364)
+  else start.setFullYear(end.getFullYear() - 10)
+  return {
+    start_date: start.toISOString().slice(0, 10),
+    end_date: end.toISOString().slice(0, 10),
+  }
+}
+
 export default function GlobalDashboardPage() {
   const [loading, setLoading] = useState(true)
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<GlobalDashboardData | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [timeRange, setTimeRange] = useState('30d')
   const [diseaseFilter, setDiseaseFilter] = useState('all')
+  const [diseases, setDiseases] = useState<Array<{ id: number; name: string }>>([])
   const [showMoreCountries, setShowMoreCountries] = useState(false)
 
-  const fetchData = async () => {
+  useEffect(() => {
+    diseasesApi.list()
+      .then(setDiseases)
+      .catch(() => setDiseases([]))
+  }, [])
+
+  const fetchData = useCallback(async () => {
     setLoading(true)
+    setError(null)
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 800))
-      
-      // Mock data
-      setData({
-        stats: { total_cases: 12500000, total_deaths: 45000, affected_countries: 120 },
-        alerts: [{ id: 1 }, { id: 2 }, { id: 3 }],
-        countryStats: [
-          { country_id: 1, country_name: 'United States', iso_code: 'US', total_cases: 4500000, latitude: 37.0902, longitude: -95.7129 },
-          { country_id: 2, country_name: 'India', iso_code: 'IN', total_cases: 3200000, latitude: 20.5937, longitude: 78.9629 },
-          { country_id: 3, country_name: 'Brazil', iso_code: 'BR', total_cases: 2800000, latitude: -14.235, longitude: -51.9253 },
-          { country_id: 4, country_name: 'France', iso_code: 'FR', total_cases: 1500000, latitude: 46.2276, longitude: 2.2137 },
-          { country_id: 5, country_name: 'United Kingdom', iso_code: 'GB', total_cases: 500000, latitude: 55.3781, longitude: -3.436 },
-          { country_id: 6, country_name: 'Italy', iso_code: 'IT', total_cases: 450000, latitude: 41.8719, longitude: 12.5674 },
-          { country_id: 7, country_name: 'Spain', iso_code: 'ES', total_cases: 400000, latitude: 40.4637, longitude: -3.7492 },
-        ],
-        timeSeries: Array.from({ length: 30 }).map((_, i) => {
-          const date = new Date()
-          date.setDate(date.getDate() - (29 - i))
-          return {
-            date: date.toISOString().split('T')[0],
-            new_cases: Math.floor(Math.random() * 50000) + 10000,
-            new_deaths: Math.floor(Math.random() * 1000) + 100
-          }
-        })
-      })
+      const params: Record<string, string | number> = getDateRange(timeRange)
+      if (diseaseFilter !== 'all') params.disease_id = Number(diseaseFilter)
+      const response = await dashboardApi.getGlobal(params)
+      setData(response)
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error)
+      setError('Unable to load current surveillance data. Please try again.')
     } finally {
       setLoading(false)
     }
-  }
+  }, [diseaseFilter, timeRange])
 
   useEffect(() => {
     fetchData()
-  }, [timeRange, diseaseFilter])
+  }, [fetchData])
 
   const timeRanges = [
     { value: '7d', label: '7d' },
@@ -67,9 +93,9 @@ export default function GlobalDashboardPage() {
     { value: 'all', label: 'All' }
   ]
 
-  const visibleCountries = showMoreCountries 
-    ? data?.countryStats?.slice(0, 20) 
-    : data?.countryStats?.slice(0, 5)
+  const visibleCountries = showMoreCountries
+    ? data?.country_stats?.slice(0, 20)
+    : data?.country_stats?.slice(0, 5)
 
   if (loading && !data) {
     return (
@@ -93,13 +119,28 @@ export default function GlobalDashboardPage() {
     )
   }
 
+  if (error && !data) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto text-center">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Global Dashboard</h1>
+        <p className="mt-3 text-red-600 dark:text-red-400">{error}</p>
+        <button onClick={fetchData} className="mt-5 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+          Try again
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 bg-slate-50 dark:bg-slate-950 min-h-screen text-slate-900 dark:text-slate-100">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Global Dashboard</h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">Real-time disease surveillance across regions</p>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">
+            Current disease surveillance across reporting regions
+            {data?.global_stats.latest_data_date ? ` · Latest data ${data.global_stats.latest_data_date}` : ''}
+          </p>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
@@ -113,9 +154,9 @@ export default function GlobalDashboardPage() {
               className="pl-9 pr-8 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:text-white appearance-none cursor-pointer"
             >
               <option value="all">All Diseases</option>
-              <option value="covid-19">COVID-19</option>
-              <option value="influenza">Influenza</option>
-              <option value="dengue">Dengue</option>
+              {diseases.map((disease) => (
+                <option key={disease.id} value={disease.id}>{disease.name}</option>
+              ))}
             </select>
           </div>
           
@@ -148,7 +189,7 @@ export default function GlobalDashboardPage() {
       </div>
 
       {/* Stats Cards */}
-      {data && <StatsCards stats={data.stats} alerts={data.alerts} />}
+      {data && <StatsCards stats={data.global_stats} />}
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -156,13 +197,13 @@ export default function GlobalDashboardPage() {
           {/* Chart */}
           <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
             <h2 className="text-lg font-semibold mb-4 text-slate-900 dark:text-white">Disease Trends</h2>
-            {data && <TimeSeriesChart data={data.timeSeries} />}
+            {data && <TimeSeriesChart data={data.time_series} />}
           </div>
           
           {/* Map */}
           <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
              <h2 className="text-lg font-semibold mb-4 text-slate-900 dark:text-white">Global Distribution</h2>
-             {data && <GlobalMap countryStats={data.countryStats} />}
+             {data && <GlobalMap countryStats={data.country_stats} />}
           </div>
         </div>
 
@@ -173,7 +214,7 @@ export default function GlobalDashboardPage() {
           </div>
           
           <div className="space-y-1 flex-grow overflow-y-auto pr-2">
-            {visibleCountries?.map((country: any, idx: number) => (
+            {visibleCountries?.map((country, idx) => (
               <div 
                 key={country.country_id}
                 className={`flex items-center justify-between p-3 rounded-lg transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50 ${
@@ -191,7 +232,7 @@ export default function GlobalDashboardPage() {
             ))}
           </div>
           
-          {data?.countryStats?.length > 5 && (
+          {(data?.country_stats?.length ?? 0) > 5 && (
             <button 
               onClick={() => setShowMoreCountries(!showMoreCountries)}
               className="mt-6 w-full py-2.5 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"

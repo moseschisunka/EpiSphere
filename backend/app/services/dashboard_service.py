@@ -198,6 +198,8 @@ class DashboardService:
                 reporting_lag_days=reporting_lag,
                 data_quality_score=row.data_quality_score,
                 data_freshness_status=self._freshness_status(reporting_lag),
+                latitude=row.country.latitude if row.country else None,
+                longitude=row.country.longitude if row.country else None,
             ))
         return stats
 

@@ -37,6 +37,8 @@ class CountryStats(BaseModel):
     reporting_lag_days: Optional[int] = None
     data_quality_score: Optional[float] = None
     data_freshness_status: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class TimeSeriesPoint(BaseModel):

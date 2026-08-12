@@ -49,8 +49,8 @@ type ECOption = echarts.ComposeOption<
 interface TimeSeriesChartProps {
   data: Array<{
     date: string
-    new_cases: number
-    new_deaths?: number
+    value: number
+    deaths?: number
   }>
 }
 
@@ -93,8 +93,8 @@ export default function TimeSeriesChart({ data }: TimeSeriesChartProps) {
     chartInstance.current = echarts.init(chartRef.current)
     
     const dates = data.map(d => d.date)
-    const cases = data.map(d => d.new_cases)
-    const deaths = data.map(d => d.new_deaths || 0)
+    const cases = data.map(d => d.value)
+    const deaths = data.map(d => d.deaths || 0)
 
     const hasDeaths = deaths.some(d => d > 0)
 

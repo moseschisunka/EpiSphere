@@ -14,26 +14,11 @@ export default function IntegrationStatus() {
         refreshLogs()
     }, [])
 
-    const handleSync = async (dataset: string) => {
-        try {
-            await interopApi.syncDHIS2(dataset, { dummy: "data" })
-            alert("Sync triggered")
-            refreshLogs()
-        } catch (e) {
-            alert("Sync failed")
-        }
-    }
-
     return (
         <div className="bg-white p-4 rounded-lg shadow-md">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">DHIS2 Integration Status</h3>
-                <button
-                    onClick={() => handleSync('aggregate_weekly')}
-                    className="text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200"
-                >
-                    Trigger Manual Sync
-                </button>
+                <span className="text-xs text-gray-500">Validated dispatch is available in Admin Portal</span>
             </div>
 
             <div className="overflow-x-auto">
