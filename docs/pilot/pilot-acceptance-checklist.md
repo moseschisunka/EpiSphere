@@ -3,7 +3,7 @@
 | Area | Evidence required | Owner | Status |
 |---|---|---|---|
 | Governance | Scope, partner, data-sharing agreement |  | Pending |
-| Privacy | Classification, retention, disclosure-control review |  | Pending |
+| Privacy | [Data inventory and retention schedule](../governance/data-inventory-and-retention.md), [PIA draft](../governance/privacy-impact-assessment.md), disclosure-control review |  | Pending approval |
 | Security | Scoped keys, role matrix, revocation test |  | Pending |
 | Ingestion | Dry run, quality thresholds, lineage, replay test |  | Pending |
 | Operations | `/ready`, metrics, backup/restore drill, rollback test |  | Pending |
