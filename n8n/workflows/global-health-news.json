@@ -3,7 +3,7 @@
   "active": false,
   "settings": {
     "executionOrder": "v1",
-    "saveManualExecutions": true,
+    "saveManualExecutions": false,
     "saveExecutionProgress": false
   },
   "nodes": [

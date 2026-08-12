@@ -30,6 +30,19 @@ Invoke-WebRequest http://localhost:8000/ready
 The backend entrypoint applies Alembic migrations before starting Gunicorn.
 Frontend and n8n wait for the backend health condition in Compose.
 
+The n8n service is configured to retain error executions for diagnosis while
+pruning successful/manual execution payloads. Production concurrency is capped
+by `N8N_CONCURRENCY_PRODUCTION_LIMIT`; adjust it only after load evidence. The
+workflow templates keep manual execution storage disabled and contain no
+credentials. Protect the n8n editor with authenticated TLS at the reverse
+proxy; do not expose the raw `5678` port to the public internet. Run the n8n
+security audit before activation (`n8n audit`) and record the result with the
+pilot evidence.
+
+Execution pruning and concurrency settings follow n8n's documented execution
+data controls: https://docs.n8n.io/hosting/scaling/execution-data and
+https://docs.n8n.io/hosting/scaling/concurrency-control/.
+
 Run the notification worker on a scheduler or worker host after configuring
 SMTP. It is intentionally bounded and safe to run repeatedly:
 

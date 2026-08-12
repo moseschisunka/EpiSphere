@@ -119,6 +119,16 @@ services:
       - WEBHOOK_URL=http://localhost:5678/
       - GENERIC_TIMEZONE=Africa/Lusaka
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:-}
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=none
+      - EXECUTIONS_DATA_SAVE_ON_PROGRESS=false
+      - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=false
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=${N8N_EXECUTIONS_DATA_MAX_AGE:-168}
+      - EXECUTIONS_DATA_PRUNE_MAX_COUNT=${N8N_EXECUTIONS_DATA_PRUNE_MAX_COUNT:-50000}
+      - N8N_CONCURRENCY_PRODUCTION_LIMIT=${N8N_CONCURRENCY_PRODUCTION_LIMIT:-2}
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=true
+      - NODES_EXCLUDE=["n8n-nodes-base.executeCommand","n8n-nodes-base.localFileTrigger","n8n-nodes-base.readWriteFile","n8n-nodes-base.ssh"]
     volumes:
       - n8n_data:/home/node/.n8n
     depends_on:
