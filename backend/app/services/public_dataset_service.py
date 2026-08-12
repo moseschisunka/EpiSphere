@@ -148,6 +148,7 @@ class PublicDatasetService:
         url: str,
         mapping: Dict[str, str],
         disease_id: int,
+        mapping_version: str = "v1",
         dry_run: bool = False
     ) -> Dict[str, Any]:
         """
@@ -169,7 +170,15 @@ class PublicDatasetService:
             source_system,
             disease_id,
             url.rsplit("/", 1)[-1] or "public-dataset.csv",
-            {"url": url, "mapping": mapping, "dry_run": dry_run},
+            {
+                "url": url,
+                "mapping": mapping,
+                "mapping_version": mapping_version,
+                "mapping_sha256": hashlib.sha256(json.dumps(mapping, sort_keys=True).encode("utf-8")).hexdigest(),
+                "dataset_contract_version": "case_timeseries/v1",
+                "transformation_version": "public_csv/v1",
+                "dry_run": dry_run,
+            },
         )
         try:
             content, final_url, response_headers = PublicDatasetService._download_public_url(url)
@@ -180,6 +189,7 @@ class PublicDatasetService:
                 "final_url": final_url,
                 "content_length": len(content),
                 "content_type": response_headers.get("content-type"),
+                "source_last_modified": response_headers.get("last-modified"),
                 "sha256": hashlib.sha256(content).hexdigest(),
             }
         except Exception as e:
@@ -298,6 +308,7 @@ class PublicDatasetService:
         db: Session,
         indicator_code: str,
         disease_id: int,
+        mapping_version: str = "who-gho-v1",
         dry_run: bool = False
     ) -> Dict[str, Any]:
         """
@@ -316,7 +327,14 @@ class PublicDatasetService:
             source_system,
             disease_id,
             f"{indicator_code}.json",
-            {"indicator_code": indicator_code, "url": url, "dry_run": dry_run},
+            {
+                "indicator_code": indicator_code,
+                "url": url,
+                "mapping_version": mapping_version,
+                "dataset_contract_version": "case_timeseries/v1",
+                "transformation_version": "who_gho/v1",
+                "dry_run": dry_run,
+            },
         )
         try:
             content, final_url, response_headers = PublicDatasetService._download_public_url(url)
@@ -327,6 +345,7 @@ class PublicDatasetService:
                 "final_url": final_url,
                 "content_length": len(content),
                 "content_type": response_headers.get("content-type"),
+                "source_last_modified": response_headers.get("last-modified"),
                 "sha256": hashlib.sha256(content).hexdigest(),
             }
             data = json.loads(content.decode("utf-8"))

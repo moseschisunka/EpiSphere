@@ -375,13 +375,13 @@ export const locationsApi = {
 }
 
 export const datasetsApi = {
-  ingestCsv: async (url: string, mapping: CsvIngestRequest['mapping'], diseaseId: number, dryRun: boolean = false) => {
-    const request: CsvIngestRequest = { url, mapping, disease_id: diseaseId, dry_run: dryRun, enqueue: !dryRun }
+  ingestCsv: async (url: string, mapping: CsvIngestRequest['mapping'], diseaseId: number, dryRun: boolean = false, mappingVersion: string = 'v1') => {
+    const request: CsvIngestRequest = { url, mapping, disease_id: diseaseId, mapping_version: mappingVersion, dry_run: dryRun, enqueue: !dryRun }
     const response = await api.post<IngestionResponse>('/datasets/ingest-csv', request)
     return response.data
   },
-  ingestWho: async (indicatorCode: string, diseaseId: number, dryRun: boolean = false) => {
-    const request: WhoIngestRequest = { indicator_code: indicatorCode, disease_id: diseaseId, dry_run: dryRun, enqueue: !dryRun }
+  ingestWho: async (indicatorCode: string, diseaseId: number, dryRun: boolean = false, mappingVersion: string = 'who-gho-v1') => {
+    const request: WhoIngestRequest = { indicator_code: indicatorCode, disease_id: diseaseId, mapping_version: mappingVersion, dry_run: dryRun, enqueue: !dryRun }
     const response = await api.post<ApiResponse<operations['ingest_who_gho_dataset_api_v1_datasets_ingest_who_post']>>('/datasets/ingest-who', request)
     return response.data
   }

@@ -41,7 +41,11 @@ UNKNOWN,2023-01-03,10,0
     with patch.object(
         PublicDatasetService,
         "_download_public_url",
-        return_value=(mock_csv_content.encode(), "http://test.com/data.csv", {"content-type": "text/csv"}),
+        return_value=(
+            mock_csv_content.encode(),
+            "http://test.com/data.csv",
+            {"content-type": "text/csv", "last-modified": "Wed, 21 Oct 2015 07:28:00 GMT"},
+        ),
     ), patch.object(settings, "PUBLIC_DATASET_ALLOWED_HOSTS", ["test.com"]), patch(
         "socket.getaddrinfo",
         return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 80))],
@@ -52,6 +56,7 @@ UNKNOWN,2023-01-03,10,0
             url="http://test.com/data.csv",
             mapping=mapping,
             disease_id=disease.id,
+            mapping_version="zambia-cholera-v2",
             dry_run=False
         )
 
@@ -68,6 +73,9 @@ UNKNOWN,2023-01-03,10,0
         assert batch.rows_total == 3
         assert batch.rows_valid == 2
         assert batch.source_system_id == db.query(SourceSystem).one().id
+        assert batch.batch_metadata["mapping_version"] == "zambia-cholera-v2"
+        assert batch.batch_metadata["mapping_sha256"]
+        assert batch.batch_metadata["source_last_modified"] == "Wed, 21 Oct 2015 07:28:00 GMT"
         assert all(case.import_batch_id == batch.id for case in cases)
 
 def test_ingest_who_gho_success(make_session):
@@ -115,6 +123,8 @@ def test_ingest_who_gho_success(make_session):
         batch = db.query(ImportBatch).one()
         assert batch.status == ImportStatus.COMMITTED
         assert batch.batch_metadata["indicator_code"] == "CHOLERA_TEST"
+        assert batch.batch_metadata["mapping_version"] == "who-gho-v1"
+        assert batch.batch_metadata["dataset_contract_version"] == "case_timeseries/v1"
 
 
 def test_reprocessing_same_public_source_is_idempotent(make_session):

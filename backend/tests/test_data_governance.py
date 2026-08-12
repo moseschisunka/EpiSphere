@@ -57,6 +57,9 @@ def test_upload_validate_only_creates_batch_without_cases():
     assert result["rows_valid"] == 1
     assert db.query(ImportBatch).count() == 1
     assert db.query(ImportStagedCase).count() == 1
+    batch = db.query(ImportBatch).one()
+    assert batch.batch_metadata["dataset_contract_version"] == "case_timeseries/v1"
+    assert batch.batch_metadata["mapping_version"] == "manual_upload/v1"
     assert db.query(Case).count() == 0
 
 

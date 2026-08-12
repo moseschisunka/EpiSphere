@@ -31,6 +31,7 @@ async def ingest_csv_dataset(
                 payload={
                     "url": payload.url,
                     "mapping": payload.mapping,
+                    "mapping_version": payload.mapping_version,
                     "disease_id": payload.disease_id,
                     "dry_run": payload.dry_run,
                 },
@@ -62,6 +63,7 @@ async def ingest_csv_dataset(
             db=db,
             url=payload.url,
             mapping=payload.mapping,
+            mapping_version=payload.mapping_version,
             disease_id=payload.disease_id,
             dry_run=payload.dry_run
         )
@@ -108,6 +110,7 @@ async def ingest_who_gho_dataset(
                 payload={
                     "indicator_code": payload.indicator_code,
                     "disease_id": payload.disease_id,
+                    "mapping_version": payload.mapping_version,
                     "dry_run": payload.dry_run,
                 },
                 created_by=agent_or_admin.id if isinstance(agent_or_admin, User) else None,
@@ -138,6 +141,7 @@ async def ingest_who_gho_dataset(
             db=db,
             indicator_code=payload.indicator_code,
             disease_id=payload.disease_id,
+            mapping_version=payload.mapping_version,
             dry_run=payload.dry_run
         )
         db.add(AuditLog(

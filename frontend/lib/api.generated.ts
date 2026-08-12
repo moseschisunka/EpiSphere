@@ -2229,6 +2229,12 @@ export interface components {
              */
             disease_id: number;
             /**
+             * Mapping Version
+             * @description Version label for this CSV field mapping
+             * @default v1
+             */
+            mapping_version: string;
+            /**
              * Dry Run
              * @description If true, parse data but do not write to DB
              * @default false
@@ -3404,6 +3410,12 @@ export interface components {
              * @description Internal Disease ID to map these cases to
              */
             disease_id: number;
+            /**
+             * Mapping Version
+             * @description Version label for the WHO GHO field mapping
+             * @default who-gho-v1
+             */
+            mapping_version: string;
             /**
              * Dry Run
              * @description If true, parse data but do not write to DB
