@@ -116,7 +116,9 @@ services:
     container_name: episphere_n8n
     restart: always
     ports:
-      - "5678:5678"
+      # Keep the editor private by default. Production access should terminate
+      # at an authenticated TLS reverse proxy, not on a public Docker port.
+      - "${N8N_PORT_BIND:-127.0.0.1:5678}:5678"
     environment:
       - N8N_HOST=localhost
       - N8N_PORT=5678

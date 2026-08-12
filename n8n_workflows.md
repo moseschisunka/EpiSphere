@@ -6,6 +6,13 @@ the backend environment and store each value in its matching encrypted n8n crede
 in a workflow export or this repository. Importable templates live in
 `n8n/workflows/`.
 
+## Deployment boundary
+
+Compose binds the n8n editor to `127.0.0.1:5678` by default. Do not change
+`N8N_PORT_BIND` to a public interface. For remote production access, place an
+authenticated TLS reverse proxy in front of n8n and configure `N8N_HOST`,
+`N8N_PROTOCOL`, and `WEBHOOK_URL` for that public hostname.
+
 ## Global health news scraper
 
 1. Add a daily Schedule Trigger.
