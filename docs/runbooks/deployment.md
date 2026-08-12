@@ -17,6 +17,11 @@
    communicate over the internal Compose network; use a separately secured
    administrative tunnel or network path rather than exposing either service.
 
+Pull requests build and scan the backend and frontend images for fixable high
+and critical operating-system and library vulnerabilities. Treat a failed
+`container-security` check as a release blocker; update the image base or
+dependency, then re-run the pipeline.
+
 Before enabling the production MFA flag, enroll every privileged operator using
 `POST /api/v1/auth/mfa/setup` and `POST /api/v1/auth/mfa/enable` in a protected
 staging/bootstrap window. Production login fails closed for privileged accounts
