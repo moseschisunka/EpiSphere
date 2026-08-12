@@ -31,6 +31,7 @@ const navGroups: NavGroup[] = [
     icon: Activity,
     items: [
       { href: '/dashboard/global', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/operations', label: 'EOC Operations', icon: Activity, roles: ['admin', 'epidemiologist', 'country_data_officer', 'facility_admin'] },
       { href: '/surveillance', label: 'Surveillance', icon: Globe, roles: ['admin', 'epidemiologist'] },
       { href: '/alerts', label: 'Alerts', icon: Bell },
     ],

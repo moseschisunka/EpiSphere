@@ -1,9 +1,9 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.models import Base, Case, Country, Disease
+from app.db.models import Alert, AlertSeverity, AlertStatus, Base, Case, Country, Disease
 from app.services.dashboard_service import DashboardService
 
 
@@ -50,4 +50,22 @@ def test_global_dashboard_returns_authoritative_stats_and_coordinates():
     assert response.country_stats[0].longitude == 27.8493
     assert response.time_series[0].value == 12
 
+    session.close()
+
+
+def test_operations_dashboard_returns_alert_slas_and_reporting_delays():
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    session = sessionmaker(bind=engine)()
+    Base.metadata.create_all(bind=engine)
+    country = Country(name="Zambia", iso_code="ZMB", iso_code_2="ZM")
+    disease = Disease(name="Cholera", code="A00")
+    session.add_all([country, disease]); session.flush()
+    session.add(Case(country_id=country.id, disease_id=disease.id, date=date.today() - timedelta(days=8), daily_cases=1, cumulative_cases=1))
+    session.add(Alert(country_id=country.id, disease_id=disease.id, severity=AlertSeverity.HIGH, status=AlertStatus.TRIGGERED, probability_score=.9, detection_method="cusum", explanation="signal", triggered_at=datetime.utcnow() - timedelta(hours=25)))
+    session.commit()
+    result = DashboardService(session).get_operations_dashboard()
+    assert result["active_alerts"] == 1
+    assert result["overdue_alerts"] == 1
+    assert result["unassigned_alerts"] == 1
+    assert result["reporting_delays"][0]["freshness_status"] == "watch"
     session.close()

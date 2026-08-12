@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from datetime import date
+from datetime import date, datetime
 
 
 class GlobalStats(BaseModel):
@@ -109,3 +109,32 @@ class CountryDashboardResponse(BaseModel):
     moving_averages: list[CountryDashboardMovingAverage]
     data_quality: CountryDashboardQuality
     latest_stats: CountryDashboardLatestStats | None = None
+
+
+class OperationsAlertQueueItem(BaseModel):
+    id: int
+    country_id: int
+    country_name: str
+    disease_name: str
+    severity: str
+    status: str
+    triggered_at: datetime
+    assigned_to: int | None = None
+    age_hours: float
+    sla_due: bool
+
+
+class ReportingDelayItem(BaseModel):
+    country_id: int
+    country_name: str
+    latest_data_date: date | None = None
+    reporting_lag_days: int | None = None
+    freshness_status: str
+
+
+class OperationsDashboardResponse(BaseModel):
+    active_alerts: int
+    overdue_alerts: int
+    unassigned_alerts: int
+    alert_queue: list[OperationsAlertQueueItem]
+    reporting_delays: list[ReportingDelayItem]
