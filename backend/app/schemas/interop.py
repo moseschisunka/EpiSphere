@@ -17,6 +17,7 @@ class DHIS2SyncResponse(BaseModel):
     dry_run: bool
     errors: list[str] = []
     message: str
+    job_id: int | None = None
 
 
 class DHIS2PullRequest(BaseModel):
@@ -37,5 +38,4 @@ class DHIS2PullResponse(BaseModel):
     dry_run: bool
     errors: list[str] = []
     message: str
-    job_id: int | None = None
     job_id: int | None = None

@@ -193,7 +193,13 @@ export default function AdminPage() {
         res = await datasetsApi.ingestCsv(csvUrl, parsedMapping, parseInt(datasetDiseaseId), dryRun)
       }
       setDatasetResult(res)
-      toast.success(dryRun ? 'Dataset dry-run parsed successfully!' : 'Dataset ingested successfully!')
+      toast.success(
+        dryRun
+          ? 'Dataset dry-run parsed successfully!'
+          : res.job_id
+            ? `Dataset import queued as job #${res.job_id}.`
+            : 'Dataset ingested successfully!'
+      )
     } catch (err: any) {
       toast.error('Dataset ingestion failed')
       setDatasetResult(err.response?.data?.detail || { success: false, errors: ['Request failed'] })
@@ -208,7 +214,13 @@ export default function AdminPage() {
       const parsed = JSON.parse(dhis2Payload)
       const res = await interopApi.syncDHIS2(dhis2Dataset, parsed, dryRun)
       setSyncResult(res)
-      toast.success(dryRun ? 'Dry run completed successfully!' : 'DHIS2 Sync executed!')
+      toast.success(
+        dryRun
+          ? 'Dry run completed successfully!'
+          : res.job_id
+            ? `DHIS2 sync queued as job #${res.job_id}.`
+            : 'DHIS2 Sync executed!'
+      )
       fetchTabContent('interop')
     } catch (err: any) {
       toast.error(err.response?.data?.detail?.message || 'DHIS2 Sync failed')
@@ -221,7 +233,13 @@ export default function AdminPage() {
       const parsedMapping = JSON.parse(pullMapping)
       const res = await interopApi.pullDHIS2(pullDataset, pullOrgUnit, pullPeriod, parsedMapping, parseInt(pullCountryId), dryRun)
       setPullResult(res)
-      toast.success(dryRun ? 'Pull simulated successfully!' : 'Data pulled successfully from DHIS2!')
+      toast.success(
+        dryRun
+          ? 'Pull simulated successfully!'
+          : res.job_id
+            ? `DHIS2 pull queued as job #${res.job_id}.`
+            : 'Data pulled successfully from DHIS2!'
+      )
       fetchTabContent('interop')
     } catch (err: any) {
       toast.error(err.response?.data?.detail?.message || 'DHIS2 Pull failed')

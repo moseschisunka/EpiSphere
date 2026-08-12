@@ -24,7 +24,7 @@ async def ingest_csv_dataset(
     Requires admin privileges or Agent API Key.
     """
     try:
-        if payload.enqueue:
+        if payload.enqueue or not payload.dry_run:
             job = enqueue_job(
                 db,
                 job_type="public_csv",
@@ -101,7 +101,7 @@ async def ingest_who_gho_dataset(
     Requires admin privileges or Agent API Key.
     """
     try:
-        if payload.enqueue:
+        if payload.enqueue or not payload.dry_run:
             job = enqueue_job(
                 db,
                 job_type="public_who_gho",

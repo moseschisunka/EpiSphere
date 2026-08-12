@@ -44,7 +44,7 @@ def trigger_dhis2_sync(
     current_user: User = Depends(allow_admin)
 ):
     """Validate and optionally sync a mapped payload to DHIS2."""
-    if sync_request.enqueue:
+    if sync_request.enqueue or not sync_request.dry_run:
         job = enqueue_job(
             db,
             job_type="dhis2_sync",
@@ -87,7 +87,7 @@ def trigger_dhis2_pull(
     current_user: User = Depends(allow_admin)
 ):
     """Fetch data from DHIS2 and store it as Cases in EpiSphere."""
-    if pull_request.enqueue:
+    if pull_request.enqueue or not pull_request.dry_run:
         job = enqueue_job(
             db,
             job_type="dhis2_pull",
