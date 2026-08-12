@@ -69,6 +69,25 @@ SMTP. It is intentionally bounded and safe to run repeatedly:
 python backend/scripts/deliver_notifications.py
 ```
 
+## Capacity validation
+
+Run the repeatable k6 contract against staging before setting production
+resource ceilings. It exercises health/readiness, dashboard queries, alert
+queues, and forecast listings with an epidemiologist or administrator token:
+
+```powershell
+$env:ACCESS_TOKEN = "<staging user token>"
+k6 run load/k6/operations.js
+```
+
+The default workload is read-only. To test ingestion, explicitly set
+`RUN_INGESTION_DRY_RUN=true` and supply an approved public dataset URL and the
+separately revocable dataset-agent key. The scenario always sends
+`dry_run: true`; never load-test real ingestion writes. Record the k6 summary,
+database/worker health, queue depth, and observed request IDs in the release
+evidence. Do not approve capacity based solely on the default thresholds;
+adjust them only with documented partner load expectations.
+
 ## Rollback
 
 1. Record the failed commit and request ID from logs.
