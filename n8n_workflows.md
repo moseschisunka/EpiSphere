@@ -1,8 +1,8 @@
 # n8n Autonomous Agent Workflows
 
 These workflows call EpiSphere through the `X-API-Key` header. Set
-`NEWS_AGENT_API_KEY` and `DATASET_AGENT_API_KEY` in the backend environment and
-store each value in its matching encrypted n8n credential. Never commit a key
+`NEWS_AGENT_API_KEY`, `DATASET_AGENT_API_KEY`, and `INTEROP_AGENT_API_KEY` in
+the backend environment and store each value in its matching encrypted n8n credential. Never commit a key
 in a workflow export or this repository. Importable templates live in
 `n8n/workflows/`.
 
@@ -35,3 +35,10 @@ Start with `dry_run: true` and confirm the returned job result before enabling
 production writes. The backend remains authoritative for authentication,
 validation, lineage, retries, and database writes; n8n only schedules and
 observes the job.
+
+## Interoperability webhooks
+
+Use `INTEROP_AGENT_API_KEY` only for n8n workflows that call
+`POST /api/v1/interop/webhook`. It cannot authenticate news or dataset
+ingestion. Record the returned correlation data in the workflow execution and
+rotate this credential independently if the workflow is disabled or exposed.

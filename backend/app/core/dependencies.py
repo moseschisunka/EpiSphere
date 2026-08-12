@@ -245,8 +245,12 @@ def _get_agent_or_admin(
     scoped_key = {
         "news": settings.NEWS_AGENT_API_KEY,
         "datasets": settings.DATASET_AGENT_API_KEY,
+        "interop": settings.INTEROP_AGENT_API_KEY,
     }.get(scope)
-    configured_key = scoped_key or settings.AGENT_API_KEY
+    # Named n8n workflows must use their own revocable credential. The legacy
+    # shared key remains available only to callers explicitly using the
+    # unscoped dependency during a controlled migration.
+    configured_key = scoped_key if scope is not None else settings.AGENT_API_KEY
     if api_key and configured_key and hmac.compare_digest(api_key, configured_key):
         return ServicePrincipal(
             name=f"n8n-{scope}" if scope else "n8n",
@@ -286,3 +290,7 @@ def get_news_agent_or_admin(request: Request, db: Session = Depends(get_db)):
 
 def get_dataset_agent_or_admin(request: Request, db: Session = Depends(get_db)):
     return _get_agent_or_admin(request, db, scope="datasets")
+
+
+def get_interop_agent_or_admin(request: Request, db: Session = Depends(get_db)):
+    return _get_agent_or_admin(request, db, scope="interop")

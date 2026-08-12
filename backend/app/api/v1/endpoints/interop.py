@@ -6,7 +6,7 @@ from typing import List, Optional
 from datetime import datetime, date
 
 from app.api.v1.deps import allow_admin
-from app.core.dependencies import get_agent_or_admin
+from app.core.dependencies import get_interop_agent_or_admin
 from app.core.database import get_db
 from app.db.models import User, InteropLog, Case, Disease, Country, InteropDirection, InteropStatus, SourceSystem
 from app.schemas.administration import SourceSystemResponse
@@ -206,7 +206,7 @@ def extract_deidentified_data(
 def receive_webhook(
     payload: WebhookPayload,
     db: Session = Depends(get_db),
-    agent_or_admin = Depends(get_agent_or_admin),
+    agent_or_admin = Depends(get_interop_agent_or_admin),
 ):
     """
     Receive inbound webhook events from external EHR, LIMS, or DHIS2 systems.

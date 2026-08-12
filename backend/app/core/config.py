@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     AGENT_API_KEY: str = ""
     NEWS_AGENT_API_KEY: str = ""
     DATASET_AGENT_API_KEY: str = ""
+    INTEROP_AGENT_API_KEY: str = ""
     N8N_ENCRYPTION_KEY: str = ""
 
     # CORS / hosts
@@ -96,8 +97,8 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def require_production_integration_secrets(self):
         if self.ENVIRONMENT.lower() in {"production", "prod"}:
-            if not self.NEWS_AGENT_API_KEY or not self.DATASET_AGENT_API_KEY:
-                raise ValueError("NEWS_AGENT_API_KEY and DATASET_AGENT_API_KEY must be configured in production")
+            if not self.NEWS_AGENT_API_KEY or not self.DATASET_AGENT_API_KEY or not self.INTEROP_AGENT_API_KEY:
+                raise ValueError("NEWS_AGENT_API_KEY, DATASET_AGENT_API_KEY, and INTEROP_AGENT_API_KEY must be configured in production")
             if not self.N8N_ENCRYPTION_KEY:
                 raise ValueError("N8N_ENCRYPTION_KEY must be configured in production")
             if not self.EMAIL_VERIFICATION_REQUIRED:
