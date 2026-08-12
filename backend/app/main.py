@@ -112,8 +112,14 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Backward-compatible application liveness endpoint."""
     return {"status": "healthy"}
+
+
+@app.get("/live")
+async def liveness_check():
+    """Process liveness only; dependency failures belong to readiness probes."""
+    return {"status": "live"}
 
 
 @app.get("/ready")

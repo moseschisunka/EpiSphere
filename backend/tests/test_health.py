@@ -15,6 +15,13 @@ def test_app_health_endpoint_imports_and_responds():
 
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
+
+
+def test_liveness_probe_does_not_depend_on_database():
+    client = TestClient(app)
+    response = client.get("/live")
+    assert response.status_code == 200
+    assert response.json() == {"status": "live"}
     assert response.headers["X-Request-ID"]
 
 
