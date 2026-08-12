@@ -10,6 +10,9 @@
    `MFA_REQUIRED_FOR_PRIVILEGED=true`.
 3. Review `PUBLIC_DATASET_ALLOWED_HOSTS` and DHIS2 settings for the deployment.
 4. Confirm the image tags in `docker-compose.yml` are approved and scanned.
+5. Set resource ceilings for PostgreSQL, Redis, backend, ingestion worker,
+   frontend, and n8n. The `.env.example` defaults are conservative starting
+   points, not capacity commitments; tune them with staging load evidence.
 
 Before enabling the production MFA flag, enroll every privileged operator using
 `POST /api/v1/auth/mfa/setup` and `POST /api/v1/auth/mfa/enable` in a protected

@@ -5,6 +5,8 @@ services:
   postgres:
     image: ${POSTGRES_IMAGE:-timescale/timescaledb:2.17.2-pg15}
     container_name: episphere_postgres
+    cpus: ${POSTGRES_CPUS:-1.0}
+    mem_limit: ${POSTGRES_MEMORY_LIMIT:-1g}
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-episphere}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-episphere_password}
@@ -23,6 +25,8 @@ services:
   redis:
     image: ${REDIS_IMAGE:-redis:7.2.5-alpine}
     container_name: episphere_redis
+    cpus: ${REDIS_CPUS:-0.5}
+    mem_limit: ${REDIS_MEMORY_LIMIT:-256m}
     ports:
       - "6379:6379"
     volumes:
@@ -39,6 +43,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: episphere_backend
+    cpus: ${BACKEND_CPUS:-1.0}
+    mem_limit: ${BACKEND_MEMORY_LIMIT:-1g}
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-episphere}:${POSTGRES_PASSWORD:-episphere_password}@postgres:5432/${POSTGRES_DB:-episphere_db}
       TIMESCALEDB_ENABLED: ${TIMESCALEDB_ENABLED:-true}
@@ -90,6 +96,8 @@ services:
     extends:
       service: backend
     container_name: episphere_ingestion_worker
+    cpus: ${INGESTION_WORKER_CPUS:-1.0}
+    mem_limit: ${INGESTION_WORKER_MEMORY_LIMIT:-1g}
     entrypoint: ["python", "-m", "scripts.run_ingestion_worker"]
     command: ["--poll-seconds", "10"]
     ports: []
@@ -102,6 +110,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: episphere_frontend
+    cpus: ${FRONTEND_CPUS:-0.5}
+    mem_limit: ${FRONTEND_MEMORY_LIMIT:-512m}
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:
@@ -114,6 +124,8 @@ services:
   n8n:
     image: ${N8N_IMAGE:-n8nio/n8n:1.88.0}
     container_name: episphere_n8n
+    cpus: ${N8N_CPUS:-0.5}
+    mem_limit: ${N8N_MEMORY_LIMIT:-512m}
     restart: always
     ports:
       # Keep the editor private by default. Production access should terminate
