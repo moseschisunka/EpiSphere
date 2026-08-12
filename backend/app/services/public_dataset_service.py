@@ -4,6 +4,7 @@ import io
 import ipaddress
 import json
 import hashlib
+import re
 import socket
 from datetime import date, datetime
 from sqlalchemy.orm import Session
@@ -13,6 +14,7 @@ from app.db.models import (
     Country,
     Disease,
     ImportBatch,
+    ImportRowError,
     ImportStatus,
     SourceSystem,
     DataQualityCheck,
@@ -20,6 +22,7 @@ from app.db.models import (
 )
 from urllib.parse import urljoin, urlparse
 from app.core.config import settings
+from app.services.data_upload import DataUploadService
 
 class PublicDatasetService:
     MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
@@ -147,6 +150,19 @@ class PublicDatasetService:
         db.add_all(checks)
 
     @staticmethod
+    def _add_row_issues(db: Session, batch_id: int, errors: list[str], warnings: list[str]) -> None:
+        """Persist external-source validation evidence alongside its import batch."""
+        for severity, messages in ((QualitySeverity.ERROR, errors), (QualitySeverity.WARNING, warnings)):
+            for message in messages:
+                match = re.match(r"(?:Row )?(\\d+)(?::|\\s)", message)
+                db.add(ImportRowError(
+                    batch_id=batch_id,
+                    row_number=int(match.group(1)) if match else 0,
+                    severity=severity,
+                    message=message,
+                ))
+
+    @staticmethod
     def _validate_public_url(url: str) -> None:
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
@@ -202,7 +218,8 @@ class PublicDatasetService:
         mapping: Dict[str, str],
         disease_id: int,
         mapping_version: str = "v1",
-        dry_run: bool = False
+        dry_run: bool = False,
+        require_review: bool = True,
     ) -> Dict[str, Any]:
         """
         Ingest a public CSV from a URL.
@@ -231,6 +248,8 @@ class PublicDatasetService:
                 "dataset_contract_version": "case_timeseries/v1",
                 "transformation_version": "public_csv/v1",
                 "dry_run": dry_run,
+                "require_review": require_review,
+                "approval_scope": "admin" if require_review else None,
             },
         )
         try:
@@ -256,6 +275,7 @@ class PublicDatasetService:
         records_imported = 0
         errors = []
         warnings = []
+        validated_cases: list[Case] = []
         source_keys: set[tuple[int, Any]] = set()
         record_dates: list[date] = []
         duplicate_rows = 0
@@ -312,35 +332,22 @@ class PublicDatasetService:
                 daily_cases = int(cases_raw) if cases_raw and str(cases_raw).isdigit() else 0
                 daily_deaths = int(deaths_raw) if deaths_raw and str(deaths_raw).isdigit() else 0
 
-                if not dry_run:
-                    source_record_id = PublicDatasetService._source_record_id(
-                        "public_url", url, c_id, disease_id, record_date
-                    )
-                    # Upsert logic
-                    existing_case = db.query(Case).filter(
-                        Case.source_system_id == source_system.id,
-                        Case.source_record_id == source_record_id,
-                    ).first()
-
-                    if existing_case:
-                        existing_case.daily_cases = daily_cases
-                        existing_case.daily_deaths = daily_deaths
-                        existing_case.source = f"Public URL Ingest ({url})"
-                        existing_case.source_system_id = source_system.id
-                        existing_case.import_batch_id = batch.id
-                    else:
-                        new_case = Case(
-                            country_id=c_id,
-                            disease_id=disease_id,
-                            date=record_date,
-                            daily_cases=daily_cases,
-                            daily_deaths=daily_deaths,
-                            source=f"Public URL Ingest ({url})",
-                            source_system_id=source_system.id,
-                            source_record_id=source_record_id,
-                            import_batch_id=batch.id,
-                        )
-                        db.add(new_case)
+                source_record_id = PublicDatasetService._source_record_id(
+                    "public_url", url, c_id, disease_id, record_date
+                )
+                validated_cases.append(Case(
+                    country_id=c_id,
+                    disease_id=disease_id,
+                    date=record_date,
+                    daily_cases=daily_cases,
+                    cumulative_cases=0,
+                    daily_deaths=daily_deaths,
+                    cumulative_deaths=0,
+                    source=f"Public URL Ingest ({url})",
+                    source_system_id=source_system.id,
+                    source_record_id=source_record_id,
+                    import_batch_id=batch.id,
+                ))
                 
                 records_imported += 1
                 record_dates.append(record_date)
@@ -349,13 +356,26 @@ class PublicDatasetService:
 
         batch.rows_total = rows_total
         batch.rows_valid = records_imported
-        batch.rows_committed = records_imported if not dry_run else 0
+        batch.rows_committed = 0
         batch.warning_count = len(warnings)
         batch.error_count = len(errors)
         batch.quality_score = round((records_imported / rows_total) * 100, 2) if rows_total else 0.0
-        batch.status = ImportStatus.VALIDATED if dry_run else (ImportStatus.FAILED if errors else ImportStatus.COMMITTED)
-        if not dry_run and not errors:
+        records_staged = 0
+        committed_count = 0
+        if errors:
+            batch.status = ImportStatus.FAILED
+        elif dry_run:
+            batch.status = ImportStatus.VALIDATED
+        elif require_review:
+            DataUploadService(db)._stage_cases(batch, validated_cases)
+            records_staged = len(validated_cases)
+            batch.status = ImportStatus.VALIDATED
+        else:
+            committed_count = DataUploadService(db)._commit_cases(validated_cases)
+            batch.rows_committed = committed_count
             batch.committed_at = datetime.utcnow()
+            batch.status = ImportStatus.COMMITTED
+        PublicDatasetService._add_row_issues(db, batch.id, errors, warnings)
         PublicDatasetService._add_quality_checks(
             db, batch.id, rows_total, records_imported, duplicate_rows, record_dates
         )
@@ -365,6 +385,7 @@ class PublicDatasetService:
         return {
             "success": not errors,
             "records_imported": records_imported,
+            "records_staged": records_staged,
             "errors": errors[:10],
             "warnings": warnings[:10],
             "batch_id": batch.id,
@@ -376,7 +397,8 @@ class PublicDatasetService:
         indicator_code: str,
         disease_id: int,
         mapping_version: str = "who-gho-v1",
-        dry_run: bool = False
+        dry_run: bool = False,
+        require_review: bool = True,
     ) -> Dict[str, Any]:
         """
         Ingests data from WHO Global Health Observatory Athena API.
@@ -401,6 +423,8 @@ class PublicDatasetService:
                 "dataset_contract_version": "case_timeseries/v1",
                 "transformation_version": "who_gho/v1",
                 "dry_run": dry_run,
+                "require_review": require_review,
+                "approval_scope": "admin" if require_review else None,
             },
         )
         try:
@@ -431,6 +455,8 @@ class PublicDatasetService:
         rows_total = len(values)
         records_imported = 0
         warnings = []
+        errors = []
+        validated_cases: list[Case] = []
         source_keys: set[tuple[int, Any]] = set()
         record_dates: list[date] = []
         duplicate_rows = 0
@@ -473,32 +499,22 @@ class PublicDatasetService:
                 
                 daily_cases = int(numeric_val)
 
-                if not dry_run:
-                    source_record_id = PublicDatasetService._source_record_id(
-                        "who_gho", indicator_code, c_id, disease_id, record_date
-                    )
-                    existing_case = db.query(Case).filter(
-                        Case.source_system_id == source_system.id,
-                        Case.source_record_id == source_record_id,
-                    ).first()
-
-                    if existing_case:
-                        existing_case.daily_cases = daily_cases
-                        existing_case.source = "WHO GHO API"
-                        existing_case.source_system_id = source_system.id
-                        existing_case.import_batch_id = batch.id
-                    else:
-                        new_case = Case(
-                            country_id=c_id,
-                            disease_id=disease_id,
-                            date=record_date,
-                            daily_cases=daily_cases,
-                            source="WHO GHO API",
-                            source_system_id=source_system.id,
-                            source_record_id=source_record_id,
-                            import_batch_id=batch.id,
-                        )
-                        db.add(new_case)
+                source_record_id = PublicDatasetService._source_record_id(
+                    "who_gho", indicator_code, c_id, disease_id, record_date
+                )
+                validated_cases.append(Case(
+                    country_id=c_id,
+                    disease_id=disease_id,
+                    date=record_date,
+                    daily_cases=daily_cases,
+                    cumulative_cases=0,
+                    daily_deaths=0,
+                    cumulative_deaths=0,
+                    source="WHO GHO API",
+                    source_system_id=source_system.id,
+                    source_record_id=source_record_id,
+                    import_batch_id=batch.id,
+                ))
                         
                 records_imported += 1
                 record_dates.append(record_date)
@@ -508,12 +524,25 @@ class PublicDatasetService:
 
         batch.rows_total = rows_total
         batch.rows_valid = records_imported
-        batch.rows_committed = records_imported if not dry_run else 0
         batch.warning_count = len(warnings)
+        batch.error_count = len(errors)
         batch.quality_score = round((records_imported / rows_total) * 100, 2) if rows_total else 0.0
-        batch.status = ImportStatus.VALIDATED if dry_run else ImportStatus.COMMITTED
-        if not dry_run:
+        records_staged = 0
+        committed_count = 0
+        if errors:
+            batch.status = ImportStatus.FAILED
+        elif dry_run:
+            batch.status = ImportStatus.VALIDATED
+        elif require_review:
+            DataUploadService(db)._stage_cases(batch, validated_cases)
+            records_staged = len(validated_cases)
+            batch.status = ImportStatus.VALIDATED
+        else:
+            committed_count = DataUploadService(db)._commit_cases(validated_cases)
+            batch.rows_committed = committed_count
             batch.committed_at = datetime.utcnow()
+            batch.status = ImportStatus.COMMITTED
+        PublicDatasetService._add_row_issues(db, batch.id, errors, warnings)
         PublicDatasetService._add_quality_checks(
             db, batch.id, rows_total, records_imported, duplicate_rows, record_dates
         )
@@ -521,9 +550,10 @@ class PublicDatasetService:
         db.commit()
 
         return {
-            "success": True,
+            "success": not errors,
             "records_imported": records_imported,
-            "errors": [],
+            "records_staged": records_staged,
+            "errors": errors[:10],
             "warnings": warnings[:10],
             "batch_id": batch.id,
         }

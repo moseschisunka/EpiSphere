@@ -215,6 +215,9 @@ async def commit_validated_import_batch(
     batch = db.query(ImportBatch).filter(ImportBatch.id == batch_id).first()
     if not batch:
         raise HTTPException(status_code=404, detail="Import batch not found")
+    if (batch.batch_metadata or {}).get("approval_scope") == "admin":
+        if not current_user.role or current_user.role.name != "admin":
+            raise HTTPException(status_code=403, detail="This external import requires administrator approval")
     if batch.country_id is not None:
         enforce_country_scope(current_user, batch.country_id)
     return DataUploadService(db).commit_validated_batch(batch_id=batch_id, user_id=current_user.id)

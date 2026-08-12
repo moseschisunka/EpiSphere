@@ -2781,6 +2781,11 @@ export interface components {
             batch_id?: number | null;
             /** Job Id */
             job_id?: number | null;
+            /**
+             * Records Staged
+             * @default 0
+             */
+            records_staged: number;
         };
         /** IngestionJobResponse */
         IngestionJobResponse: {

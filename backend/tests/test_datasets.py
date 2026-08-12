@@ -5,8 +5,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.db.models import Base
 from app.services.public_dataset_service import PublicDatasetService
-from app.db.models import Case, Country, DataQualityCheck, Disease, ImportBatch, ImportStatus, SourceSystem
+from app.db.models import Case, Country, DataQualityCheck, Disease, ImportBatch, ImportStagedCase, ImportStatus, SourceSystem
 from app.core.config import settings
+from app.services.data_upload import DataUploadService
 
 @pytest.fixture
 def make_session():
@@ -63,15 +64,16 @@ UNKNOWN,2023-01-03,10,0
         assert result["success"] is True
         assert result["records_imported"] == 2 # 1 unknown country skipped
 
-        cases = db.query(Case).filter(Case.disease_id == disease.id).all()
-        assert len(cases) == 2
-        assert cases[0].daily_cases == 50
-        assert cases[1].daily_cases == 30
+        assert result["records_staged"] == 2
+        assert db.query(Case).filter(Case.disease_id == disease.id).count() == 0
+        assert db.query(ImportStagedCase).count() == 2
 
         batch = db.query(ImportBatch).one()
-        assert batch.status == ImportStatus.COMMITTED
+        assert batch.status == ImportStatus.VALIDATED
         assert batch.rows_total == 3
         assert batch.rows_valid == 2
+        assert batch.rows_committed == 0
+        assert batch.batch_metadata["approval_scope"] == "admin"
         assert batch.source_system_id == db.query(SourceSystem).one().id
         assert batch.batch_metadata["mapping_version"] == "zambia-cholera-v2"
         assert batch.batch_metadata["mapping_sha256"]
@@ -80,7 +82,7 @@ UNKNOWN,2023-01-03,10,0
         assert checks["row_validity_rate"].passed is False
         assert checks["duplicate_source_rows"].metric_value == 0.0
         assert checks["timeliness"].threshold == 14.0
-        assert all(case.import_batch_id == batch.id for case in cases)
+        assert db.query(ImportStagedCase).filter(ImportStagedCase.batch_id == batch.id).count() == 2
 
 def test_ingest_who_gho_success(make_session):
     db = make_session
@@ -121,11 +123,11 @@ def test_ingest_who_gho_success(make_session):
         assert result["success"] is True
         assert result["records_imported"] == 2
 
-        cases = db.query(Case).filter(Case.disease_id == disease.id).all()
-        assert len(cases) == 2
-        assert cases[0].daily_cases == 1000
+        assert result["records_staged"] == 2
+        assert db.query(Case).filter(Case.disease_id == disease.id).count() == 0
+        assert db.query(ImportStagedCase).count() == 2
         batch = db.query(ImportBatch).one()
-        assert batch.status == ImportStatus.COMMITTED
+        assert batch.status == ImportStatus.VALIDATED
         assert batch.batch_metadata["indicator_code"] == "CHOLERA_TEST"
         assert batch.batch_metadata["mapping_version"] == "who-gho-v1"
         assert batch.batch_metadata["dataset_contract_version"] == "case_timeseries/v1"
@@ -153,6 +155,8 @@ def test_reprocessing_same_public_source_is_idempotent(make_session):
         second = PublicDatasetService.ingest_csv_url(db, "https://test.com/data.csv", mapping, disease.id)
 
     assert first["records_imported"] == second["records_imported"] == 1
+    DataUploadService(db).commit_validated_batch(first["batch_id"], user_id=1)
+    DataUploadService(db).commit_validated_batch(second["batch_id"], user_id=1)
     cases = db.query(Case).filter(Case.disease_id == disease.id).all()
     assert len(cases) == 1
     assert db.query(ImportBatch).count() == 2

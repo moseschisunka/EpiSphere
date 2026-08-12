@@ -23,3 +23,4 @@ class IngestResponse(BaseModel):
     warnings: list[str] = []
     batch_id: int | None = None
     job_id: int | None = None
+    records_staged: int = 0
