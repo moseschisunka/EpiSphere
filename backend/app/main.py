@@ -3,10 +3,12 @@ EpiSphere AI - Main FastAPI Application
 Production-ready global public health surveillance platform
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from contextlib import asynccontextmanager
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -15,6 +17,7 @@ from slowapi import _rate_limit_exceeded_handler
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.logger import setup_logging
+from app.core.database import SessionLocal
 from app.api.v1.api import api_router
 
 logger = setup_logging()
@@ -80,3 +83,15 @@ async def root():
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy"}
+
+
+@app.get("/ready")
+def readiness_check():
+    """Readiness probe that verifies the application can reach its database."""
+    try:
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+    except SQLAlchemyError as exc:
+        logger.error("Readiness check failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Database is not ready") from exc
+    return {"status": "ready"}
