@@ -9,6 +9,7 @@ from app.api.v1.deps import allow_admin
 from app.core.dependencies import get_agent_or_admin
 from app.core.database import get_db
 from app.db.models import User, InteropLog, Case, Disease, Country, InteropDirection, InteropStatus, SourceSystem
+from app.schemas.administration import SourceSystemResponse
 from app.schemas.interop import DHIS2SyncRequest, DHIS2SyncResponse, DHIS2PullRequest, DHIS2PullResponse
 from app.schemas.interop_extract import DataExtractResponse, AggregateCaseMetric, WebhookPayload
 from app.services.interop_service import InteropService
@@ -17,7 +18,7 @@ from app.services.ingestion_jobs import enqueue_job
 router = APIRouter()
 
 
-@router.get("/source-systems")
+@router.get("/source-systems", response_model=List[SourceSystemResponse])
 def list_source_systems(
     db: Session = Depends(get_db),
     current_user: User = Depends(allow_admin),

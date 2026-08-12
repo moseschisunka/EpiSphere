@@ -108,7 +108,7 @@ export default function UploadPage() {
       setResult(response)
       
       if (response.success && response.committed) {
-        toast.success(`Data uploaded successfully! ${response.inserted || 0} cases inserted.`)
+        toast.success(`Data uploaded successfully! ${response.rows_committed} cases inserted.`)
         setTimeout(() => {
           router.push('/dashboard/global')
         }, 2000)

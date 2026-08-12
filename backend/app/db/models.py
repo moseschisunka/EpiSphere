@@ -162,6 +162,16 @@ class User(Base):
     mfa_pending_secret = Column(String(64), nullable=True)
     
     role = relationship("Role", back_populates="users")
+
+    @property
+    def roles(self) -> list[str]:
+        """Compatibility-safe role names for the authenticated UI contract.
+
+        EpiSphere currently assigns one operational role per user, but clients
+        consume a list to avoid baking that storage decision into navigation and
+        authorization UX.
+        """
+        return [self.role.name] if self.role and self.role.name else []
     country = relationship("Country", back_populates="users")
     facility = relationship("Facility", back_populates="users")
     audit_logs = relationship("AuditLog", back_populates="user")

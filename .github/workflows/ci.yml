@@ -97,6 +97,35 @@ jobs:
       - name: Run browser journey smoke tests
         run: npm run test:e2e
 
+  api-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+      - name: Export OpenAPI contract
+        working-directory: backend
+        run: python scripts/export_openapi.py ../frontend/.openapi-ci.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Verify generated TypeScript API contract
+        working-directory: frontend
+        env:
+          EPISPHERE_OPENAPI_URL: .openapi-ci.json
+        run: |
+          npm run generate:api-types
+          git diff --exit-code -- lib/api.generated.ts
+
   compose:
     runs-on: ubuntu-latest
     steps:

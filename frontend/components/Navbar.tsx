@@ -228,9 +228,10 @@ export default function Navbar() {
     const checkAuth = async () => {
       try {
         const user = await authApi.getCurrentUser()
-        if (user && user.role) {
+        const role = user.roles?.[0]
+        if (user && role) {
           setIsAuthenticated(true)
-          setUserRole(user.role.name)
+          setUserRole(role)
           setUserName(user.full_name || user.email)
         }
       } catch (e) {

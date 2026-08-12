@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { alertsApi } from '@/lib/api'
+import type { AlertStatus } from '@/lib/api-contract'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Search, Filter, RefreshCw, AlertTriangle, ChevronRight, Activity } from 'lucide-react'
@@ -39,7 +40,7 @@ export default function AlertsPage() {
     }
   }
 
-  const updateAlert = async (alertId: number, nextStatus: string) => {
+  const updateAlert = async (alertId: number, nextStatus: AlertStatus) => {
     const resolutionNotes = nextStatus === 'resolved' || nextStatus === 'false_positive'
       ? window.prompt('Add resolution notes (optional):') || undefined
       : undefined

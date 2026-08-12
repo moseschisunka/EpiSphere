@@ -22,7 +22,7 @@ from app.core.security import (
     verify_totp_code,
 )
 from app.db.models import Base, Role, User, UserSecurityToken
-from app.schemas.user import MfaVerifyRequest
+from app.schemas.user import MfaVerifyRequest, UserResponse
 
 
 def make_session():
@@ -96,6 +96,16 @@ def test_token_version_revokes_existing_access_tokens():
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(get_current_user(token=token, db=db))
     assert exc_info.value.status_code == 401
+    db.close()
+
+
+def test_authenticated_user_contract_includes_assigned_role_name():
+    db = make_session()
+    user = seed_user(db)
+
+    response = UserResponse.model_validate(user)
+
+    assert response.roles == ["public"]
     db.close()
 
 

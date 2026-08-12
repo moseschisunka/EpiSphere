@@ -45,6 +45,7 @@ class UserResponse(UserBase):
     is_active: bool
     is_verified: bool
     mfa_enabled: bool = False
+    roles: list[str] = []
     created_at: datetime
     last_login: Optional[datetime] = None
 

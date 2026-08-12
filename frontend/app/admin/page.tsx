@@ -19,8 +19,8 @@ interface NewsArticle {
   title: string
   summary: string
   content: string
-  source?: string
-  image_url?: string
+  source?: string | null
+  image_url?: string | null
   is_public: boolean
   published_at: string
 }
