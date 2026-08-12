@@ -31,6 +31,13 @@ Invoke-WebRequest http://localhost:8000/ready/components
 The backend entrypoint applies Alembic migrations before starting Gunicorn.
 Frontend and n8n wait for the backend health condition in Compose.
 
+`/ready/components` is the deployment readiness gate. In production it fails
+closed when the durable ingestion worker has not written a fresh database
+heartbeat within `WORKER_HEARTBEAT_MAX_AGE_SECONDS` (45 seconds by default),
+or when it has left a job running beyond `WORKER_STALE_AFTER_MINUTES`. An idle
+worker is therefore distinguishable from a stopped worker. Investigate the
+worker logs and its database connectivity before restarting or replaying work.
+
 The n8n service is configured to retain error executions for diagnosis while
 pruning successful/manual execution payloads. Production concurrency is capped
 by `N8N_CONCURRENCY_PRODUCTION_LIMIT`; adjust it only after load evidence. The

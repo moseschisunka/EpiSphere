@@ -25,7 +25,7 @@ from app.core.logger import setup_logging
 from app.core.database import SessionLocal
 from app.core.cache import redis_client
 from app.core.metrics import request_metrics
-from app.db.models import IngestionJob, IngestionJobStatus
+from app.db.models import IngestionJob, IngestionJobStatus, WorkerHeartbeat
 from app.api.v1.api import api_router
 
 logger = setup_logging()
@@ -149,6 +149,9 @@ def component_readiness_check():
                 IngestionJob.started_at.isnot(None),
                 IngestionJob.started_at < stale_cutoff,
             ).scalar() or 0
+            latest_worker_heartbeat = db.query(WorkerHeartbeat).filter(
+                WorkerHeartbeat.worker_type == "ingestion"
+            ).order_by(WorkerHeartbeat.last_heartbeat_at.desc()).first()
         components["database"] = {"status": "ready"}
         components["ingestion_worker_queue"] = {
             "status": "ready" if stale_running_jobs == 0 else "failed",
@@ -158,6 +161,19 @@ def component_readiness_check():
         }
         if stale_running_jobs:
             failures.append("ingestion_worker_queue")
+        heartbeat_age_seconds = None
+        if latest_worker_heartbeat:
+            heartbeat_age_seconds = max(0, int((datetime.utcnow() - latest_worker_heartbeat.last_heartbeat_at).total_seconds()))
+        heartbeat_ready = latest_worker_heartbeat is not None and heartbeat_age_seconds <= settings.WORKER_HEARTBEAT_MAX_AGE_SECONDS
+        components["ingestion_worker"] = {
+            "status": "ready" if heartbeat_ready else ("missing" if latest_worker_heartbeat is None else "stale"),
+            "worker_id": latest_worker_heartbeat.worker_id if latest_worker_heartbeat else None,
+            "last_heartbeat_at": latest_worker_heartbeat.last_heartbeat_at if latest_worker_heartbeat else None,
+            "heartbeat_age_seconds": heartbeat_age_seconds,
+            "max_age_seconds": settings.WORKER_HEARTBEAT_MAX_AGE_SECONDS,
+        }
+        if settings.WORKER_HEARTBEAT_REQUIRED and not heartbeat_ready:
+            failures.append("ingestion_worker")
     except SQLAlchemyError as exc:
         logger.error("Component readiness database check failed: %s", exc)
         components["database"] = {"status": "failed"}

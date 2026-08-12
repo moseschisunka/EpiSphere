@@ -11,6 +11,7 @@ from app.services.ingestion_jobs import (
     enqueue_job,
     fail_job,
     replay_job,
+    record_worker_heartbeat,
     request_cancel,
 )
 
@@ -83,4 +84,17 @@ def test_replay_rejects_queued_job():
     job = enqueue_job(db, job_type="test", payload={})
     with pytest.raises(ValueError, match="failed or dead-letter"):
         replay_job(db, job)
+    db.close()
+
+
+def test_worker_heartbeat_is_upserted_with_latest_job_state():
+    db = make_session()
+    job = enqueue_job(db, job_type="test", payload={})
+
+    first = record_worker_heartbeat(db, worker_id="worker-a", last_job_id=job.id)
+    updated = record_worker_heartbeat(db, worker_id="worker-a", last_error="temporary upstream failure")
+
+    assert first.worker_id == updated.worker_id == "worker-a"
+    assert updated.last_job_id == job.id
+    assert updated.last_error == "temporary upstream failure"
     db.close()

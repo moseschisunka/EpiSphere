@@ -574,6 +574,21 @@ class IngestionJob(Base):
     )
 
 
+class WorkerHeartbeat(Base):
+    """Latest liveness signal from a durable background worker."""
+
+    __tablename__ = "worker_heartbeats"
+
+    worker_id = Column(String(255), primary_key=True)
+    worker_type = Column(String(100), nullable=False, index=True)
+    started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    last_heartbeat_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    last_job_id = Column(Integer, ForeignKey("ingestion_jobs.id"), nullable=True)
+    last_error = Column(Text, nullable=True)
+
+    last_job = relationship("IngestionJob")
+
+
 class ImportRowError(Base):
     """Row-level validation issue captured during upload."""
     __tablename__ = "import_row_errors"

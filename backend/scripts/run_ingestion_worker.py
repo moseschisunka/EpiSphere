@@ -13,7 +13,7 @@ import time
 from app.core.database import SessionLocal
 from app.db.models import IngestionJobStatus, User
 from app.services.covid_data_service import CovidDataService
-from app.services.ingestion_jobs import claim_next_job, complete_job, fail_job, request_cancel
+from app.services.ingestion_jobs import claim_next_job, complete_job, fail_job, record_worker_heartbeat, request_cancel
 from app.services.interop_service import InteropService
 from app.services.public_dataset_service import PublicDatasetService
 
@@ -53,6 +53,7 @@ async def execute_job(job) -> dict:
 def process_one(worker_id: str) -> bool:
     db = SessionLocal()
     try:
+        record_worker_heartbeat(db, worker_id=worker_id)
         job = claim_next_job(db, worker_id=worker_id)
         if not job:
             return False
@@ -62,8 +63,10 @@ def process_one(worker_id: str) -> bool:
         try:
             result = asyncio.run(execute_job(job))
             complete_job(db, job, result)
+            record_worker_heartbeat(db, worker_id=worker_id, last_job_id=job.id)
         except Exception as exc:  # worker must retain failure for retry/DLQ
             fail_job(db, job, str(exc))
+            record_worker_heartbeat(db, worker_id=worker_id, last_job_id=job.id, last_error=str(exc))
         return True
     finally:
         db.close()

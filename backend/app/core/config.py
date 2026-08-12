@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     # Worker readiness controls. A stale RUNNING job indicates a worker may
     # have stopped after claiming work and should fail the component probe.
     WORKER_STALE_AFTER_MINUTES: int = 15
+    WORKER_HEARTBEAT_MAX_AGE_SECONDS: int = 45
+    WORKER_HEARTBEAT_REQUIRED: bool = False
 
     # Interoperability
     DHIS2_URL: str = ""
@@ -104,6 +106,8 @@ class Settings(BaseSettings):
                 raise ValueError("MFA_REQUIRED_FOR_PRIVILEGED must be enabled in production")
             if not self.SMTP_HOST or not self.SMTP_USER or not self.SMTP_PASSWORD:
                 raise ValueError("SMTP_HOST, SMTP_USER, and SMTP_PASSWORD must be configured in production")
+            if not self.WORKER_HEARTBEAT_REQUIRED:
+                raise ValueError("WORKER_HEARTBEAT_REQUIRED must be enabled in production")
         return self
 
     @field_validator("CORS_ORIGINS", "ALLOWED_HOSTS", "PUBLIC_DATASET_ALLOWED_HOSTS", mode="before")

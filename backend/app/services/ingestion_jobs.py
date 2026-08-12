@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from app.db.models import IngestionJob, IngestionJobStatus
+from app.db.models import IngestionJob, IngestionJobStatus, WorkerHeartbeat
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,39 @@ def enqueue_job(
 
 def get_job(db: Session, job_id: int) -> IngestionJob | None:
     return db.query(IngestionJob).filter(IngestionJob.id == job_id).first()
+
+
+def record_worker_heartbeat(
+    db: Session,
+    *,
+    worker_id: str,
+    worker_type: str = "ingestion",
+    last_job_id: int | None = None,
+    last_error: str | None = None,
+) -> WorkerHeartbeat:
+    """Upsert the latest durable-worker liveness signal."""
+
+    now = datetime.utcnow()
+    heartbeat = db.query(WorkerHeartbeat).filter(WorkerHeartbeat.worker_id == worker_id).first()
+    if heartbeat is None:
+        heartbeat = WorkerHeartbeat(
+            worker_id=worker_id,
+            worker_type=worker_type,
+            started_at=now,
+            last_heartbeat_at=now,
+            last_job_id=last_job_id,
+            last_error=(last_error or None),
+        )
+        db.add(heartbeat)
+    else:
+        heartbeat.worker_type = worker_type
+        heartbeat.last_heartbeat_at = now
+        if last_job_id is not None:
+            heartbeat.last_job_id = last_job_id
+        heartbeat.last_error = (last_error or None)
+    db.commit()
+    db.refresh(heartbeat)
+    return heartbeat
 
 
 def claim_next_job(db: Session, *, worker_id: str | None = None) -> IngestionJob | None:
