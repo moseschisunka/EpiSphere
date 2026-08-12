@@ -146,6 +146,10 @@ class User(Base):
     is_verified = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login = Column(DateTime, nullable=True)
+    token_version = Column(Integer, nullable=False, default=0)
+    mfa_enabled = Column(Boolean, nullable=False, default=False)
+    mfa_secret = Column(String(64), nullable=True)
+    mfa_pending_secret = Column(String(64), nullable=True)
     
     role = relationship("Role", back_populates="users")
     country = relationship("Country", back_populates="users")
@@ -162,6 +166,25 @@ class User(Base):
     
     def __repr__(self):
         return f"<User(username='{self.username}', email='{self.email}')>"
+
+
+class UserSecurityToken(Base):
+    """Single-use, hashed tokens for account security workflows."""
+    __tablename__ = "user_security_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    token_type = Column(String(40), nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("idx_user_security_token_active", "user_id", "token_type", "used_at"),
+    )
 
 
 class Country(Base):

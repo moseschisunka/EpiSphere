@@ -5,6 +5,10 @@ Security utilities: JWT, password hashing, authentication
 from datetime import datetime, timedelta
 from typing import Optional
 import bcrypt
+import base64
+import hashlib
+import hmac
+import secrets
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -31,6 +35,46 @@ def get_password_hash(password: str) -> str:
         password.encode("utf-8"),
         bcrypt.gensalt(),
     ).decode("utf-8")
+
+
+def generate_opaque_token() -> str:
+    """Generate a high-entropy one-time token for account workflows."""
+    return secrets.token_urlsafe(32)
+
+
+def hash_security_token(token: str) -> str:
+    return hmac.new(
+        settings.SECRET_KEY.encode("utf-8"),
+        token.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def generate_totp_secret() -> str:
+    return base64.b32encode(secrets.token_bytes(20)).decode("ascii").rstrip("=")
+
+
+def generate_totp_code(secret: str, timestamp: Optional[datetime] = None) -> str:
+    """Generate a 6-digit RFC 6238-compatible SHA-1 TOTP code."""
+    now = timestamp or datetime.utcnow()
+    counter = int(now.timestamp()) // 30
+    padded_secret = secret + "=" * (-len(secret) % 8)
+    key = base64.b32decode(padded_secret, casefold=True)
+    digest = hmac.new(key, counter.to_bytes(8, "big"), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    binary = int.from_bytes(digest[offset:offset + 4], "big") & 0x7FFFFFFF
+    return f"{binary % 1_000_000:06d}"
+
+
+def verify_totp_code(secret: str, code: str, timestamp: Optional[datetime] = None) -> bool:
+    if not code or len(code) != 6 or not code.isdigit():
+        return False
+    now = timestamp or datetime.utcnow()
+    for offset in (-1, 0, 1):
+        candidate_time = now + timedelta(seconds=offset * 30)
+        if hmac.compare_digest(generate_totp_code(secret, candidate_time), code):
+            return True
+    return False
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -82,6 +126,10 @@ async def get_current_user(
 
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
+        raise credentials_exception
+
+    token_version = payload.get("ver")
+    if token_version is not None and token_version != (user.token_version or 0):
         raise credentials_exception
 
     return user

@@ -4,10 +4,7 @@ import type { NextRequest } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    console.log('Login request body:', body);
-    
     const { username, password } = body;
-    console.log('Extracted:', { username, password });
 
     if (!username || !password) {
       return NextResponse.json({ detail: 'Missing username or password' }, { status: 400 });
@@ -36,7 +33,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(data, { status: response.status });
     }
 
-    // Create the response and set the httpOnly cookie
+    if (data.mfa_required && data.mfa_challenge_token) {
+      const challengeResponse = NextResponse.json({ success: true, mfa_required: true });
+      challengeResponse.cookies.set('mfa_challenge', data.mfa_challenge_token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/',
+        maxAge: 5 * 60,
+      });
+      return challengeResponse;
+    }
+
+    // Create a response and set the httpOnly access-token cookie.
     const nextResponse = NextResponse.json({ success: true });
     
     nextResponse.cookies.set('token', data.access_token, {

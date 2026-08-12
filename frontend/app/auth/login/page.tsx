@@ -31,7 +31,11 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      await authApi.login(username.trim(), password)
+      const result = await authApi.login(username.trim(), password)
+      if (result.mfa_required) {
+        router.push('/auth/mfa')
+        return
+      }
       toast.success('Welcome back! Signed in successfully.')
       router.push('/dashboard/global')
     } catch (err: any) {
@@ -123,6 +127,12 @@ export default function LoginPage() {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
+
+        <div className="mt-4 text-center">
+          <Link href="/auth/reset-password" className="text-sm text-blue-300 hover:text-blue-200 underline">
+            Forgot your password?
+          </Link>
+        </div>
 
         <p className="mt-6 text-center text-blue-200/80 text-sm">
           Don&apos;t have an account?{' '}

@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-this-secret-key-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    AUTH_TOKEN_EXPIRE_MINUTES: int = 30
+    MFA_CHALLENGE_EXPIRE_MINUTES: int = 5
+    EMAIL_VERIFICATION_REQUIRED: bool = False
+    MFA_REQUIRED_FOR_PRIVILEGED: bool = False
     AGENT_API_KEY: str = ""
     NEWS_AGENT_API_KEY: str = ""
     DATASET_AGENT_API_KEY: str = ""
@@ -82,6 +86,12 @@ class Settings(BaseSettings):
                 raise ValueError("NEWS_AGENT_API_KEY and DATASET_AGENT_API_KEY must be configured in production")
             if not self.N8N_ENCRYPTION_KEY:
                 raise ValueError("N8N_ENCRYPTION_KEY must be configured in production")
+            if not self.EMAIL_VERIFICATION_REQUIRED:
+                raise ValueError("EMAIL_VERIFICATION_REQUIRED must be enabled in production")
+            if not self.MFA_REQUIRED_FOR_PRIVILEGED:
+                raise ValueError("MFA_REQUIRED_FOR_PRIVILEGED must be enabled in production")
+            if not self.SMTP_HOST or not self.SMTP_USER or not self.SMTP_PASSWORD:
+                raise ValueError("SMTP_HOST, SMTP_USER, and SMTP_PASSWORD must be configured in production")
         return self
 
     @field_validator("CORS_ORIGINS", "ALLOWED_HOSTS", "PUBLIC_DATASET_ALLOWED_HOSTS", mode="before")

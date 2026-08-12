@@ -4,9 +4,17 @@
 
 1. Use a reviewed commit from `main`; verify `git status` is clean.
 2. Provide non-empty production values for `SECRET_KEY`, `NEWS_AGENT_API_KEY`,
-   `DATASET_AGENT_API_KEY`, and `N8N_ENCRYPTION_KEY` through a secret manager.
+   `DATASET_AGENT_API_KEY`, `N8N_ENCRYPTION_KEY`, and SMTP credentials through a
+   secret manager. Set `ENVIRONMENT=production`,
+   `EMAIL_VERIFICATION_REQUIRED=true`, and
+   `MFA_REQUIRED_FOR_PRIVILEGED=true`.
 3. Review `PUBLIC_DATASET_ALLOWED_HOSTS` and DHIS2 settings for the deployment.
 4. Confirm the image tags in `docker-compose.yml` are approved and scanned.
+
+Before enabling the production MFA flag, enroll every privileged operator using
+`POST /api/v1/auth/mfa/setup` and `POST /api/v1/auth/mfa/enable` in a protected
+staging/bootstrap window. Production login fails closed for privileged accounts
+that are not enrolled.
 
 ## Deploy
 

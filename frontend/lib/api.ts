@@ -30,6 +30,22 @@ export const authApi = {
     const response = await axios.post('/api/auth/login', { username, password })
     return response.data
   },
+  verifyMfa: async (code: string) => {
+    const response = await axios.post('/api/auth/mfa/verify', { code })
+    return response.data
+  },
+  verifyEmail: async (token: string) => {
+    const response = await api.post('/auth/verify-email', { token })
+    return response.data
+  },
+  requestPasswordReset: async (email: string) => {
+    const response = await api.post('/auth/request-password-reset', { email })
+    return response.data
+  },
+  resetPassword: async (token: string, password: string) => {
+    const response = await api.post('/auth/reset-password', { token, password })
+    return response.data
+  },
   register: async (userData: any) => {
     const response = await api.post('/auth/register', userData)
     return response.data
