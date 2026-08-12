@@ -59,6 +59,3 @@ models/
 *.h5
 *.pt
 *.pth
-
-# Docker
-.dockerignore
