@@ -91,6 +91,13 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
+def create_mfa_challenge_token(data: dict, expires_delta: timedelta) -> str:
+    """Create a JWT that can only be exchanged for an MFA-verified access token."""
+    challenge_data = data.copy()
+    challenge_data["token_type"] = "mfa_challenge"
+    return create_access_token(challenge_data, expires_delta=expires_delta)
+
+
 def decode_access_token(token: str) -> Optional[dict]:
     """Decode and verify a JWT token"""
     try:
@@ -114,7 +121,7 @@ async def get_current_user(
     )
 
     payload = decode_access_token(token)
-    if payload is None:
+    if payload is None or payload.get("token_type") == "mfa_challenge":
         raise credentials_exception
 
     user_id = payload.get("sub")

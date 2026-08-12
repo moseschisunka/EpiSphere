@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # File uploads
     UPLOAD_DIR: Path = Path("uploads")
     MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024  # 50MB
+    MAX_UPLOAD_ROWS: int = 100_000
+    MAX_XLSX_UNCOMPRESSED_SIZE: int = 200 * 1024 * 1024
+    MAX_XLSX_ARCHIVE_MEMBERS: int = 200
     ALLOWED_EXTENSIONS: List[str] = [".csv", ".xlsx", ".xls"]
     PUBLIC_DATASET_ALLOWED_HOSTS: str | List[str] = [
         "ghoapi.azureedge.net",

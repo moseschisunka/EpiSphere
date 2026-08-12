@@ -33,7 +33,10 @@ def get_location_hierarchy(
 
         c_list = []
         for c in countries:
-            facilities = db.query(Facility).filter(Facility.country_id == c.id).all()
+            facilities = db.query(Facility).filter(
+                Facility.country_id == c.id,
+                Facility.public_visible.is_(True),
+            ).all()
             provinces_set = set(f.province for f in facilities if f.province)
             districts_set = set(f.district for f in facilities if f.district)
 
@@ -71,7 +74,10 @@ def get_location_hierarchy(
 @router.get("/provinces", response_model=ProvincesResponse)
 def get_provinces_by_country(country_id: int, db: Session = Depends(get_db)):
     """List unique provinces/states for a given country."""
-    facilities = db.query(Facility).filter(Facility.country_id == country_id).all()
+    facilities = db.query(Facility).filter(
+        Facility.country_id == country_id,
+        Facility.public_visible.is_(True),
+    ).all()
     provinces = sorted(list(set(f.province for f in facilities if f.province)))
     return {"country_id": country_id, "provinces": provinces}
 
@@ -81,7 +87,8 @@ def get_districts_by_province(country_id: int, province: str, db: Session = Depe
     """List districts in a specific province."""
     facilities = db.query(Facility).filter(
         Facility.country_id == country_id,
-        Facility.province == province
+        Facility.province == province,
+        Facility.public_visible.is_(True),
     ).all()
     districts = sorted(list(set(f.district for f in facilities if f.district)))
     return {"country_id": country_id, "province": province, "districts": districts}

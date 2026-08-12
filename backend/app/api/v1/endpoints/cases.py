@@ -54,7 +54,7 @@ async def list_cases(
 @router.post("/", response_model=CaseResponse, status_code=status.HTTP_201_CREATED)
 async def create_case(
     case_data: CaseCreate,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_role(["country_data_officer", "admin", "epidemiologist"])),
     db: Session = Depends(get_db)
 ):
     """Create a new case record"""

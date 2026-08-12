@@ -77,7 +77,7 @@ def test_generate_report_serializes_report_metadata(monkeypatch):
             start_date=date(2026, 1, 1),
             end_date=date(2026, 1, 7),
         ),
-        current_user=SimpleNamespace(id=3),
+            current_user=SimpleNamespace(id=3, is_superuser=True),
         db=object(),
     ))
 

@@ -323,7 +323,8 @@ export const publicApi = {
 
 export const newsApi = {
   list: async (params?: ApiQuery<operations['list_news_articles_api_v1_news_get']>) => {
-    const response = await api.get<NewsResponse>('/news', { params })
+    const { public_only, ...query } = params ?? {}
+    const response = await api.get<NewsResponse>(public_only === false ? '/news/admin' : '/news', { params: query })
     return response.data
   },
   get: async (id: number) => {

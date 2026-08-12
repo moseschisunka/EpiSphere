@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.api.v1.endpoints.alerts import get_alert
 from app.api.v1.endpoints.facilities import get_facility, list_facilities
-from app.core.dependencies import apply_country_scope, enforce_country_scope
+from app.core.dependencies import apply_country_scope, enforce_country_scope, require_role
 from app.db.models import (
     Alert,
     AlertSeverity,
@@ -65,6 +65,28 @@ def test_country_scope_filters_queries_and_rejects_cross_country_targets():
 
     with pytest.raises(HTTPException) as exc_info:
         enforce_country_scope(user, kenya.id)
+    assert exc_info.value.status_code == 403
+    db.close()
+
+
+def test_public_user_is_denied_case_write_role():
+    db = make_session()
+    role = Role(name="public", description="Public user")
+    db.add(role)
+    db.flush()
+    user = User(
+        username="public-user",
+        email="public@example.com",
+        hashed_password="test-hash",
+        role_id=role.id,
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+
+    checker = require_role(["country_data_officer", "admin", "epidemiologist"])
+    with pytest.raises(HTTPException) as exc_info:
+        checker(current_user=user, db=db)
     assert exc_info.value.status_code == 403
     db.close()
 

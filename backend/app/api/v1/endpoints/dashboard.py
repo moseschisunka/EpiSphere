@@ -8,7 +8,7 @@ from datetime import date
 from app.core.database import get_db
 from app.schemas.dashboard import CountryDashboardResponse, DashboardResponse, OperationsDashboardResponse
 from app.services.dashboard_service import DashboardService
-from app.core.dependencies import get_current_active_user, get_user_country_scope, is_admin_user
+from app.core.dependencies import enforce_country_scope, get_current_active_user, get_user_country_scope, is_admin_user, require_role
 from app.db.models import User
 
 router = APIRouter()
@@ -19,6 +19,7 @@ async def get_global_dashboard(
     disease_id: Optional[int] = Query(None),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    current_user: User = Depends(require_role(["epidemiologist", "admin", "country_data_officer"])),
     db: Session = Depends(get_db)
 ):
     """Get global surveillance dashboard data"""
@@ -37,9 +38,11 @@ async def get_country_dashboard(
     disease_id: Optional[int] = Query(None),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    current_user: User = Depends(require_role(["epidemiologist", "admin", "country_data_officer"])),
     db: Session = Depends(get_db)
 ):
     """Get country-level dashboard data"""
+    enforce_country_scope(current_user, country_id)
     service = DashboardService(db)
     dashboard_data = service.get_country_dashboard(
         country_id=country_id,

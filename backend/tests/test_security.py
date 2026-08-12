@@ -119,6 +119,18 @@ def test_admin_bearer_token_is_accepted(monkeypatch):
     db.close()
 
 
+def test_mfa_challenge_token_is_rejected_by_agent_or_admin(monkeypatch):
+    db = make_session()
+    monkeypatch.setattr(settings, "AGENT_API_KEY", "")
+    token = create_access_token({"sub": "1", "token_type": "mfa_challenge"})
+
+    with pytest.raises(Exception) as exc_info:
+        get_agent_or_admin(make_request({"Authorization": f"Bearer {token}"}), db)
+
+    assert exc_info.value.status_code == 401
+    db.close()
+
+
 def test_who_indicator_code_rejects_path_injection_shape():
     with pytest.raises(ValueError):
         WhoGhoIngestRequest(indicator_code="../../etc/passwd", disease_id=2)

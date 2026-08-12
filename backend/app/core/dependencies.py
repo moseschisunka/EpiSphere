@@ -263,7 +263,7 @@ def _get_agent_or_admin(
     if scheme.lower() == "bearer" and token.strip():
         token = token.strip()
         payload = decode_access_token(token)
-        if payload:
+        if payload and payload.get("token_type") != "mfa_challenge":
             user_id = payload.get("sub")
             if user_id:
                 try:

@@ -134,10 +134,16 @@ def test_privileged_mfa_login_returns_challenge_and_verification_returns_access_
     assert result["mfa_required"] is True
     assert result["access_token"] is None
 
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(get_current_user(token=result["mfa_challenge_token"], db=db))
+    assert exc_info.value.status_code == 401
+
     verified = asyncio.run(verify_mfa(
         make_request(),
         MfaVerifyRequest(challenge_token=result["mfa_challenge_token"], code=generate_totp_code(secret)),
         db,
     ))
     assert verified["access_token"]
+    authenticated = asyncio.run(get_current_user(token=verified["access_token"], db=db))
+    assert authenticated.id == user.id
     db.close()

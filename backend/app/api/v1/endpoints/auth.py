@@ -10,6 +10,7 @@ from app.core.database import get_db
 from app.core.limiter import limiter
 from app.core.security import (
     create_access_token,
+    create_mfa_challenge_token,
     decode_access_token,
     generate_opaque_token,
     generate_totp_secret,
@@ -183,8 +184,8 @@ async def login(
             detail="Privileged users must enroll MFA before sign in",
         )
     if user.mfa_enabled and role_name in PRIVILEGED_ROLES:
-        challenge_token = create_access_token(
-            {"sub": str(user.id), "ver": user.token_version or 0, "mfa": True},
+        challenge_token = create_mfa_challenge_token(
+            {"sub": str(user.id), "ver": user.token_version or 0},
             expires_delta=timedelta(minutes=settings.MFA_CHALLENGE_EXPIRE_MINUTES),
         )
         return {
@@ -366,7 +367,7 @@ async def verify_mfa(
     db: Session = Depends(get_db),
 ):
     challenge = decode_access_token(payload.challenge_token)
-    if not challenge or not challenge.get("mfa"):
+    if not challenge or challenge.get("token_type") != "mfa_challenge":
         raise HTTPException(status_code=401, detail="Invalid or expired MFA challenge")
     try:
         user_id = int(challenge.get("sub"))

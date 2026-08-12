@@ -2,6 +2,7 @@
 
 import io
 import hashlib
+import zipfile
 from typing import Dict, Any, Optional
 from datetime import datetime, date
 
@@ -70,6 +71,11 @@ class DataUploadService:
             )
 
         df = self._read_dataframe(contents, file_ext)
+        if len(df) > settings.MAX_UPLOAD_ROWS:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Dataset exceeds maximum row limit",
+            )
         df.columns = [str(col).strip() for col in df.columns]
 
         country = self.db.query(Country).filter(Country.id == country_id).first()
@@ -253,9 +259,33 @@ class DataUploadService:
         try:
             if file_ext == "csv":
                 return pd.read_csv(io.BytesIO(contents))
+            if file_ext == "xlsx":
+                self._validate_xlsx_archive(contents)
             return pd.read_excel(io.BytesIO(contents))
         except Exception as e:
+            if isinstance(e, HTTPException):
+                raise
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Error reading file: {str(e)}")
+
+    @staticmethod
+    def _validate_xlsx_archive(contents: bytes) -> None:
+        """Reject ZIP-based XLSX files that exceed safe expansion limits before parsing."""
+        try:
+            with zipfile.ZipFile(io.BytesIO(contents)) as archive:
+                members = archive.infolist()
+                if len(members) > settings.MAX_XLSX_ARCHIVE_MEMBERS:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail="XLSX contains too many archive members",
+                    )
+                uncompressed_size = sum(member.file_size for member in members)
+                if uncompressed_size > settings.MAX_XLSX_UNCOMPRESSED_SIZE:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail="XLSX exceeds maximum expanded size",
+                    )
+        except zipfile.BadZipFile:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid XLSX archive")
 
     def _get_or_create_source_system(self, code: str) -> SourceSystem:
         normalized = code.strip().lower() or "manual_upload"
