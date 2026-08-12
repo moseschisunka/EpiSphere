@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     PUBLIC_DATASET_MAX_REDIRECTS: int = 3
     PUBLIC_DISCLOSURE_THRESHOLD: int = 5
 
+    # Retention controls. The scheduled runner defaults to dry-run unless the
+    # operator explicitly passes --apply.
+    SECURITY_TOKEN_RETENTION_DAYS: int = 1
+    NOTIFICATION_RETENTION_DAYS: int = 180
+
     # Interoperability
     DHIS2_URL: str = ""
     DHIS2_USERNAME: str = ""
