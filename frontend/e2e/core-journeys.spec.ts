@@ -130,6 +130,27 @@ test('clinician can open a patient encounter workflow', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'New Clinical Encounter' })).toBeVisible()
 })
 
+test('pharmacist can dispense a queued prescription without exposing raw identity', async ({ page }) => {
+  await authenticated(page)
+  await page.route('**/api/v1/pharmacy/prescriptions*', (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{ id: 21, drug_name: 'Oral rehydration salts', quantity: 2, patient_mrn: 'Protected', clinician_name: 'Clinical Officer' }]),
+    })
+  })
+  await page.route('**/api/v1/pharmacy/dispense', (route) => {
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 21, status: 'dispensed' }) })
+  })
+
+  await page.goto('/pharmacy')
+  await expect(page.getByRole('heading', { name: 'Pharmacy Desk' })).toBeVisible()
+  await expect(page.getByText('Oral rehydration salts')).toBeVisible()
+  await expect(page.getByText('Protected')).toBeVisible()
+  await page.getByRole('button', { name: 'Dispense' }).click()
+  await expect(page.getByText('No pending prescriptions')).toBeVisible()
+})
+
 test('platform administrator can access the operations hub', async ({ page }) => {
   await authenticated(page)
   await page.route('**/api/v1/auth/me*', (route) => route.fulfill({
