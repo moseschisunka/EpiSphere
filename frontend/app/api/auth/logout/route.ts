@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { rejectCrossSiteMutation } from '@/lib/server/csrf';
 
 export async function POST(request: NextRequest) {
+  const csrfFailure = rejectCrossSiteMutation(request);
+  if (csrfFailure) {
+    return csrfFailure;
+  }
   const token = request.cookies.get('token')?.value;
   if (token) {
     try {

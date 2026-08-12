@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { rejectCrossSiteMutation } from '@/lib/server/csrf'
 
 export async function POST(request: NextRequest) {
+  const csrfFailure = rejectCrossSiteMutation(request)
+  if (csrfFailure) {
+    return csrfFailure
+  }
   const challenge = request.cookies.get('mfa_challenge')?.value
   if (!challenge) {
     return NextResponse.json({ detail: 'MFA challenge is missing or expired' }, { status: 401 })
