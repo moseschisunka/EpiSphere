@@ -15,3 +15,8 @@ Required approvals:
 Use [pilot-acceptance-checklist.md](pilot-acceptance-checklist.md) to record
 evidence weekly. Do not expand from a bounded partner or synthetic dataset to
 national or multi-country use without a signed go/no-go review.
+# Pilot materials
+
+Use the [acceptance checklist](pilot-acceptance-checklist.md) to collect the
+required evidence and the [controlled-pilot charter](controlled-pilot-charter-template.md)
+to document scope, approvals, weekly evaluation, and the final go/no-go decision.
