@@ -14,10 +14,11 @@ from app.core.dependencies import (
     get_user_country_scope,
     require_role,
 )
-from app.db.models import Case, Country, Disease, User, AuditLog, AuditAction, ImportBatch, ImportRowError
+from app.db.models import Case, Country, Disease, User, AuditLog, AuditAction, ImportBatch, ImportRowError, ImportStatus, SourceSystem
 from app.schemas.case import CaseCreate, CaseResponse, CaseUpdate, CaseBulkUpload, CaseStats, CaseUploadResult
 from app.services.case_service import CaseService
 from app.services.data_upload import DataUploadService
+from app.services.ingestion_lineage import create_import_batch, get_or_create_source_system
 
 router = APIRouter()
 
@@ -66,23 +67,59 @@ async def create_case(
     if not disease:
         raise HTTPException(status_code=404, detail="Disease not found")
     
-    # Check if case already exists for this date
+    source_system = None
+    if case_data.source_system_id:
+        source_system = db.query(SourceSystem).filter(SourceSystem.id == case_data.source_system_id).first()
+        if not source_system:
+            raise HTTPException(status_code=404, detail="Source system not found")
+    else:
+        source_system = get_or_create_source_system(
+            db,
+            code="manual_case_entry",
+            name="Manual case entry",
+            system_type="manual_entry",
+        )
+
+    source_record_id = case_data.source_record_id or (
+        f"manual-case:{source_system.code}:{case_data.country_id}:"
+        f"{case_data.disease_id}:{case_data.date.isoformat()}"
+    )
+
+    # Check idempotency before creating the batch envelope. Callers that need
+    # multiple observations for the same date must supply distinct source IDs.
     existing = db.query(Case).filter(
         and_(
-            Case.country_id == case_data.country_id,
-            Case.disease_id == case_data.disease_id,
-            Case.date == case_data.date
+            Case.source_system_id == source_system.id,
+            Case.source_record_id == source_record_id,
         )
     ).first()
-    
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Case record already exists for this date"
+            detail="Case record already exists for this source record",
         )
-    
+
+    batch = create_import_batch(
+        db,
+        filename="manual_case_entry",
+        dataset_type="case_timeseries",
+        source_system=source_system,
+        uploaded_by=current_user.id,
+        country_id=case_data.country_id,
+        disease_id=case_data.disease_id,
+        rows_total=1,
+        metadata={"entry_mode": "single_case", "source_record_id": source_record_id},
+        status=ImportStatus.COMMITTED,
+    )
+
     # Create case
-    new_case = Case(**case_data.dict())
+    case_values = case_data.dict(exclude={"source_system_id", "source_record_id", "import_batch_id"})
+    new_case = Case(
+        **case_values,
+        source_system_id=source_system.id,
+        source_record_id=source_record_id,
+        import_batch_id=batch.id,
+    )
     db.add(new_case)
     db.commit()
     db.refresh(new_case)

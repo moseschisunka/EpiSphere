@@ -16,8 +16,10 @@ from app.db.models import (
     Patient,
     Prescription,
     User,
+    ImportStatus,
 )
 from app.schemas import clinical as schemas
+from app.services.ingestion_lineage import create_import_batch, get_or_create_source_system
 
 router = APIRouter()
 
@@ -31,17 +33,49 @@ def process_outbreak_signal(db: Session, encounter: Encounter) -> int:
         if diagnosis.diagnosis_type != DiagnosisType.CONFIRMED or not diagnosis.disease_id:
             continue
 
+        source_system = get_or_create_source_system(
+            db,
+            code="clinical_encounter",
+            name="Clinical encounter syndromic aggregation",
+            system_type="clinical_aggregation",
+            owner="EpiSphere facility operations",
+        )
+        source_record_id = (
+            f"clinical-aggregate:{encounter.facility.country_id}:"
+            f"{diagnosis.disease_id}:{encounter_date.isoformat()}:"
+            f"{encounter.facility.district or 'national'}"
+        )
+        batch = create_import_batch(
+            db,
+            filename=f"clinical-encounter-{encounter.id}",
+            dataset_type="clinical_syndromic_aggregate",
+            source_system=source_system,
+            uploaded_by=encounter.clinician_id,
+            country_id=encounter.facility.country_id,
+            disease_id=diagnosis.disease_id,
+            rows_total=1,
+            metadata={
+                "entry_mode": "confirmed_diagnosis_aggregation",
+                "source_record_id": source_record_id,
+                "facility_id": encounter.facility_id,
+            },
+            status=ImportStatus.COMMITTED,
+        )
+
         case = db.query(Case).filter(
             Case.country_id == encounter.facility.country_id,
             Case.disease_id == diagnosis.disease_id,
             Case.date == encounter_date,
             Case.subnational_region == encounter.facility.district,
             Case.source == "clinical_encounter",
+            Case.source_system_id == source_system.id,
+            Case.source_record_id == source_record_id,
         ).first()
 
         if case:
             case.daily_cases += 1
             case.cumulative_cases += 1
+            case.import_batch_id = batch.id
             case.updated_at = datetime.utcnow()
         else:
             case = Case(
@@ -54,7 +88,10 @@ def process_outbreak_signal(db: Session, encounter: Encounter) -> int:
                 cumulative_deaths=0,
                 subnational_region=encounter.facility.district,
                 source="clinical_encounter",
-                notes=f"Aggregated from encounter {encounter.id}",
+                source_system_id=source_system.id,
+                source_record_id=source_record_id,
+                import_batch_id=batch.id,
+                notes="Aggregated from a confirmed clinical diagnosis",
             )
             db.add(case)
         created_or_updated += 1
