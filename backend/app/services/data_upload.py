@@ -181,6 +181,23 @@ class DataUploadService:
         if batch.error_count:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Batches with validation errors cannot be committed")
 
+        blocking_checks = (
+            self.db.query(DataQualityCheck)
+            .filter(
+                DataQualityCheck.batch_id == batch.id,
+                DataQualityCheck.severity == QualitySeverity.ERROR,
+                DataQualityCheck.passed.is_(False),
+            )
+            .order_by(DataQualityCheck.check_name)
+            .all()
+        )
+        if blocking_checks:
+            names = ", ".join(check.check_name for check in blocking_checks)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Batch failed required quality checks: {names}",
+            )
+
         staged_rows = (
             self.db.query(ImportStagedCase)
             .filter(ImportStagedCase.batch_id == batch.id)

@@ -134,6 +134,31 @@ def test_ingest_who_gho_success(make_session):
         assert db.query(DataQualityCheck).filter(DataQualityCheck.batch_id == batch.id).count() == 3
 
 
+def test_failed_error_quality_check_blocks_external_batch_approval(make_session):
+    db = make_session
+    country = Country(name="Zambia", iso_code="ZMB", iso_code_2="ZM")
+    disease = Disease(name="Cholera", code="A00")
+    db.add_all([country, disease])
+    db.commit()
+    csv_content = b"Country,Date,Cases\nZMB,2026-08-01,50\nUNKNOWN,2026-08-02,10\n"
+    mapping = {"country_iso": "Country", "date": "Date", "daily_cases": "Cases"}
+
+    with patch.object(
+        PublicDatasetService,
+        "_download_public_url",
+        return_value=(csv_content, "https://test.com/data.csv", {"content-type": "text/csv"}),
+    ), patch.object(settings, "PUBLIC_DATASET_ALLOWED_HOSTS", ["test.com"]), patch(
+        "socket.getaddrinfo",
+        return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))],
+    ):
+        result = PublicDatasetService.ingest_csv_url(db, "https://test.com/data.csv", mapping, disease.id)
+
+    with pytest.raises(Exception, match="row_validity_rate") as exc_info:
+        DataUploadService(db).commit_validated_batch(result["batch_id"], user_id=1)
+    assert exc_info.value.status_code == 409
+    assert db.query(Case).count() == 0
+
+
 def test_reprocessing_same_public_source_is_idempotent(make_session):
     db = make_session
     country = Country(name="Zambia", iso_code="ZMB", iso_code_2="ZM")

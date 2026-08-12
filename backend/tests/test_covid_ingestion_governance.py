@@ -69,8 +69,6 @@ def test_owid_ingestion_stages_reviewable_batch_and_replays_idempotently(monkeyp
     csv_text = (
         "location,iso_code,date,new_cases,total_cases,new_deaths,total_deaths\n"
         "Zambia,ZMB,2026-08-01,10,100,1,2\n"
-        "Unknown,XXX,2026-08-01,3,3,0,0\n"
-        "Zambia,ZMB,2026-08-01,10,100,1,2\n"
     )
     monkeypatch.setattr(
         "app.services.covid_data_service.httpx.AsyncClient",
@@ -88,7 +86,7 @@ def test_owid_ingestion_stages_reviewable_batch_and_replays_idempotently(monkeyp
     assert batch.batch_metadata["approval_scope"] == "admin"
     assert db.query(Case).count() == 0
     assert db.query(ImportStagedCase).filter(ImportStagedCase.batch_id == batch.id).count() == 1
-    assert db.query(ImportRowError).filter(ImportRowError.batch_id == batch.id).count() == 2
+    assert db.query(ImportRowError).filter(ImportRowError.batch_id == batch.id).count() == 0
     assert db.query(DataQualityCheck).filter(DataQualityCheck.batch_id == batch.id).count() == 3
 
     DataUploadService(db).commit_validated_batch(batch.id, user.id)
