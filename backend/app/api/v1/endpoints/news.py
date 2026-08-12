@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 
 from app.core.database import get_db
-from app.db.models import NewsArticle, User
+from app.db.models import AuditAction, AuditLog, NewsArticle, User
 from app.schemas import news as news_schema
 from app.api.v1.deps import allow_admin
+from app.core.limiter import limiter
 
 router = APIRouter()
 
@@ -43,7 +44,9 @@ def get_news_article(article_id: int, db: Session = Depends(get_db)):
 from app.core.dependencies import get_agent_or_admin
 
 @router.post("", response_model=news_schema.NewsArticle)
+@limiter.limit("30/minute")
 def create_news_article(
+    request: Request,
     article_in: news_schema.NewsArticleCreate,
     db: Session = Depends(get_db),
     agent_or_admin = Depends(get_agent_or_admin)
@@ -61,6 +64,19 @@ def create_news_article(
     db.add(article)
     db.commit()
     db.refresh(article)
+
+    actor = agent_or_admin if hasattr(agent_or_admin, "name") else None
+    db.add(AuditLog(
+        user_id=agent_or_admin.id if isinstance(agent_or_admin, User) else None,
+        action=AuditAction.CREATE,
+        resource_type="news_article",
+        resource_id=article.id,
+        details={
+            "actor": actor.name if actor else "admin",
+            "auth_method": actor.auth_method if actor else "bearer",
+        },
+    ))
+    db.commit()
     return article
 
 

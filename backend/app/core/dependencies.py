@@ -2,12 +2,13 @@
 FastAPI dependencies for authorization and permissions (RBAC)
 """
 
-from typing import List, Optional
+from dataclasses import dataclass
+from typing import List
 import hmac
-import os
 from fastapi import Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.security import get_current_user
 from app.core.database import get_db
 from app.db.models import User, AuditLog, AuditAction
@@ -137,6 +138,14 @@ allow_clinician = RoleChecker(["admin", "clinician", "facility_admin"])
 allow_pharmacist = RoleChecker(["admin", "pharmacist", "facility_admin"])
 allow_data_officer = RoleChecker(["admin", "epidemiologist", "country_data_officer", "facility_admin"])
 
+
+@dataclass(frozen=True)
+class ServicePrincipal:
+    """Identity for a non-human integration caller."""
+
+    name: str
+    auth_method: str
+
 def get_agent_or_admin(
     request: Request,
     db: Session = Depends(get_db)
@@ -151,19 +160,24 @@ def get_agent_or_admin(
     
     # 1. Check API Key
     api_key = request.headers.get("x-api-key")
-    configured_key = os.environ.get("AGENT_API_KEY")
+    configured_key = settings.AGENT_API_KEY
     if api_key and configured_key and hmac.compare_digest(api_key, configured_key):
-        return "agent"
+        return ServicePrincipal(name="n8n", auth_method="x-api-key")
 
     # 2. Check JWT Bearer
     auth_header = request.headers.get("authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        token = auth_header.split(" ", 1)[1].strip()
+    scheme, _, token = auth_header.partition(" ") if auth_header else ("", "", "")
+    if scheme.lower() == "bearer" and token.strip():
+        token = token.strip()
         payload = decode_access_token(token)
         if payload:
             user_id = payload.get("sub")
             if user_id:
-                user = db.query(User).filter(User.id == int(user_id)).first()
+                try:
+                    user_id = int(user_id)
+                except (TypeError, ValueError):
+                    user_id = None
+                user = db.query(User).filter(User.id == user_id).first() if user_id else None
                 if user and user.is_active and user.role and getattr(user.role, 'name', '').lower() == "admin":
                     return user
 
